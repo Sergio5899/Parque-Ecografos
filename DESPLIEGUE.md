@@ -1,21 +1,23 @@
 # Desplegar en internet (gratis) con OneDrive como base de datos
 
-## 1. Azure — ya en marcha
-Sigue los pasos que te di en el chat. Al terminar tendrás 3 valores:
-`MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`.
+## 1. Azure — ✅ hecho
+App registrada, permisos `Files.ReadWrite` + `User.Read` concedidos.
 
-## 2. Generar el refresh token (una vez, en tu PC)
-En una terminal, dentro de esta carpeta (`webapp`):
+## 2. Refresh token — ✅ hecho
+Ya generado y probado (lectura + escritura funcionando contra tu OneDrive
+personal, carpeta `PARQUE ECOS/ECOS DATOS.xlsx`). Los 4 valores
+(`MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_REFRESH_TOKEN`) te
+los paso por chat cuando vayamos a rellenar Render — nunca se guardan en
+este repositorio.
 
+Si alguna vez hay que regenerarlo (p. ej. caduca por inactividad de +90
+días), repite esto en esta carpeta:
 ```bash
 set MS_TENANT_ID=xxxx
 set MS_CLIENT_ID=xxxx
 set MS_CLIENT_SECRET=xxxx
 python bootstrap_auth.py
 ```
-
-Se abrirá el navegador, inicias sesión con tu cuenta y aceptas los permisos.
-Al final te imprime un `MS_REFRESH_TOKEN` — guárdalo, lo necesitas en el paso 4.
 
 ## 3. Subir el código a GitHub
 ```bash
@@ -30,14 +32,14 @@ git push -u origin main
 1. Regístrate en render.com (gratis) y conecta tu cuenta de GitHub.
 2. "New +" → "Web Service" → elige el repo `parque-ecografos`.
 3. Build command: `pip install -r requirements.txt` — Start command: se coge del `Procfile` automáticamente.
-4. En "Environment", añade estas variables:
+4. En "Environment", añade estas variables (los valores te los paso por chat):
 
 | Variable | Valor |
 |---|---|
-| MS_TENANT_ID | (del paso 1) |
-| MS_CLIENT_ID | (del paso 1) |
-| MS_CLIENT_SECRET | (del paso 1) |
-| MS_REFRESH_TOKEN | (del paso 2) |
+| MS_TENANT_ID | (te lo paso por chat) |
+| MS_CLIENT_ID | (te lo paso por chat) |
+| MS_CLIENT_SECRET | (te lo paso por chat) |
+| MS_REFRESH_TOKEN | (te lo paso por chat) |
 | APP_PASSWORD | la contraseña que quieras para entrar a la app |
 | SECRET_KEY | `trKXv26lgL3ZyPUpMkzX4l4wSILT2N0LUJG77U4tIpE` |
 
@@ -45,3 +47,11 @@ git push -u origin main
 
 Nota: el plan gratuito de Render "duerme" el servicio tras ~15 min sin uso; la
 primera carga tras estar dormido tarda unos 30-50s en despertar, luego va normal.
+
+## Nota sobre el archivo Excel
+El Excel "en vivo" que edita la app ahora vive en tu OneDrive **personal**,
+en `PARQUE ECOS/ECOS DATOS.xlsx` (no en la carpeta de equipo `CCM Servicio -
+Documentos`, que requeriría un permiso de administrador que no estaba
+disponible). El original en la carpeta de equipo se quedó tal cual, como
+copia congelada — si luego se resuelve el permiso de admin, se puede migrar
+la app a leer/escribir ahí en vez de tu OneDrive personal.
