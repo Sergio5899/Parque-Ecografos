@@ -21,7 +21,7 @@ REDIRECT_URI = "http://localhost:8400/callback"
 
 REFRESH_TOKEN_ONEDRIVE_PATH = "_app_data/refresh_token.txt"
 
-_lock = threading.Lock()
+_lock = threading.RLock()
 _state = {
     "refresh_token": os.environ.get("MS_REFRESH_TOKEN"),
     "access_token": None,
