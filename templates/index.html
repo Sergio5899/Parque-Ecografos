@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Parque de Ecógrafos</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#F2F6F5; --surface:#FFFFFF; --surface-2:#E9F1EF; --border:#DAE6E3;
+    --ink:#152420; --ink-soft:#5B6E6A; --ink-faint:#8CA19C;
+    --accent:#0E6E63; --accent-ink:#FFFFFF; --accent-soft:#DEEFEA;
+    --good:#1F8A57; --good-soft:#E4F4EA; --warn:#B4780C; --warn-soft:#FBEEDA;
+    --bad:#C13F3F; --bad-soft:#FBE7E7; --muted:#8FA09D;
+    --shadow: 0 1px 2px rgba(16,32,28,0.06), 0 8px 24px -12px rgba(16,32,28,0.18);
+    --radius: 14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{ background:var(--bg); color:var(--ink); font-family:"IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing:antialiased; }
+  .mono{ font-family:"IBM Plex Mono", ui-monospace, SFMono-Regular, monospace; font-variant-numeric: tabular-nums; }
+  img{max-width:100%;}
+  [hidden]{display:none!important;}
+
+  #app{ max-width:640px; margin:0 auto; min-height:100%; position:relative; display:flex; flex-direction:column; }
+
+  header.top{ position:sticky; top:0; z-index:20; background:var(--bg); padding:14px 16px 10px; border-bottom:1px solid transparent; }
+  header.top.scrolled{ border-bottom-color:var(--border); box-shadow:var(--shadow); }
+  .brand{ display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .brand-mark{ width:34px; height:34px; border-radius:10px; flex:none; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; }
+  .brand-mark svg{ width:19px; height:19px; }
+  .brand h1{ font-size:17px; margin:0; font-weight:700; letter-spacing:-0.01em; }
+  .brand p{ margin:0; font-size:12px; color:var(--ink-soft); }
+  .brand .path{ font-size:10.5px; color:var(--ink-faint); font-family:"IBM Plex Mono"; margin-top:1px; word-break:break-all; }
+
+  .search-row{ position:relative; margin-bottom:10px; }
+  .search-row svg.icon{ position:absolute; left:12px; top:50%; transform:translateY(-50%); width:16px; height:16px; color:var(--ink-faint); pointer-events:none; }
+  #search{ width:100%; padding:11px 38px 11px 36px; border-radius:12px; border:1px solid var(--border); background:var(--surface); color:var(--ink); font-size:14.5px; font-family:inherit; }
+  #search:focus{ outline:2px solid var(--accent); outline-offset:-1px; }
+  #search::placeholder{ color:var(--ink-faint); }
+  .clear-search{ position:absolute; right:6px; top:50%; transform:translateY(-50%); width:26px; height:26px; border-radius:50%; border:none; background:transparent; color:var(--ink-faint); display:none; align-items:center; justify-content:center; cursor:pointer; }
+  .clear-search svg{ width:15px; height:15px; }
+  .clear-search.show{ display:flex; }
+
+  .chips{ display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
+  .chips::-webkit-scrollbar{ display:none; }
+  .chip{ flex:none; padding:6px 12px; border-radius:999px; border:1px solid var(--border); background:var(--surface); color:var(--ink-soft); font-size:12.5px; font-weight:500; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:5px; }
+  .chip .n{ color:var(--ink-faint); }
+  .chip.active{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .chip.active .n{ color:var(--accent-ink); opacity:.75; }
+
+  .stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:0 16px 14px; }
+  .stat-tile{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:10px 12px; }
+  .stat-tile .v{ font-family:"IBM Plex Mono"; font-size:19px; font-weight:600; line-height:1.1; }
+  .stat-tile .l{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
+  .stat-tile.bad .v{ color:var(--bad); }
+
+  main{ flex:1; padding:0 16px 100px; }
+  .list{ display:flex; flex-direction:column; gap:10px; }
+  .card{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:13px 14px; cursor:pointer; transition:box-shadow .15s, transform .15s; }
+  .card:active{ transform:scale(0.99); }
+  .card-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+  .card-modelo{ font-weight:600; font-size:15px; letter-spacing:-0.005em; }
+  .card-sn{ font-family:"IBM Plex Mono"; font-size:11.5px; color:var(--ink-faint); margin-top:1px; }
+  .badge{ flex:none; font-size:10.5px; font-weight:600; padding:3px 8px; border-radius:999px; white-space:nowrap; letter-spacing:.01em; }
+  .badge.good{ background:var(--good-soft); color:var(--good); }
+  .badge.warn{ background:var(--warn-soft); color:var(--warn); }
+  .badge.bad{ background:var(--bad-soft); color:var(--bad); }
+  .badge.muted{ background:var(--surface-2); color:var(--ink-faint); }
+  .card-hosp{ display:flex; align-items:center; gap:6px; margin-top:9px; font-size:13px; color:var(--ink-soft); }
+  .card-hosp svg{ width:13px; height:13px; flex:none; color:var(--ink-faint); }
+  .card-hosp.unset{ font-style:italic; color:var(--ink-faint); }
+  .card-meta{ display:flex; gap:12px; margin-top:8px; font-size:11.5px; color:var(--ink-faint); font-family:"IBM Plex Mono"; }
+
+  .empty{ text-align:center; padding:56px 20px; color:var(--ink-soft); }
+  .empty svg{ width:38px; height:38px; color:var(--ink-faint); margin-bottom:10px; }
+  .empty p{ margin:4px 0 0; font-size:13.5px; }
+  .empty strong{ display:block; font-size:14.5px; color:var(--ink); }
+
+  .fab{ position:fixed; z-index:30; right:calc(50% - 320px + 20px); bottom:24px; width:56px; height:56px; border-radius:50%; background:var(--accent); color:var(--accent-ink); border:none; box-shadow:var(--shadow); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  @media (max-width:680px){ .fab{ right:20px; } }
+  .fab svg{ width:24px; height:24px; }
+
+  .sheet{ position:fixed; inset:0; background:var(--bg); z-index:40; display:flex; flex-direction:column; transform:translateY(100%); transition:transform .22s ease; }
+  .sheet.open{ transform:translateY(0); }
+  .sheet-header{ position:sticky; top:0; background:var(--bg); border-bottom:1px solid var(--border); padding:14px 14px; display:flex; align-items:center; gap:10px; z-index:2; }
+  .icon-btn{ width:34px; height:34px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--ink); display:flex; align-items:center; justify-content:center; cursor:pointer; flex:none; }
+  .icon-btn svg{ width:17px; height:17px; }
+  .icon-btn.danger{ color:var(--bad); }
+  .sheet-title{ flex:1; min-width:0; }
+  .sheet-title h2{ margin:0; font-size:16px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sheet-title p{ margin:0; font-size:11.5px; color:var(--ink-faint); font-family:"IBM Plex Mono"; }
+  .sheet-body{ flex:1; overflow-y:auto; padding:14px 16px 100px; max-width:640px; margin:0 auto; width:100%; }
+
+  .section{ margin-bottom:20px; }
+  .section-title{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--ink-faint); margin:0 0 8px 2px; }
+  .kv-card{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+  .kv-row{ display:flex; justify-content:space-between; gap:14px; padding:10px 14px; font-size:13.5px; }
+  .kv-row + .kv-row{ border-top:1px solid var(--border); }
+  .kv-row .k{ color:var(--ink-soft); flex:none; }
+  .kv-row .v{ text-align:right; font-family:"IBM Plex Mono"; font-size:13px; word-break:break-word; }
+  .kv-row .v.empty-v{ color:var(--ink-faint); font-family:inherit; font-style:italic; }
+
+  .table-card{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+  .trow{ padding:11px 14px; }
+  .trow + .trow{ border-top:1px solid var(--border); }
+  .trow .t-name{ font-weight:600; font-size:13.5px; margin-bottom:4px; }
+  .trow .t-grid{ display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; font-size:12px; }
+  .trow .t-grid div{ color:var(--ink-soft); }
+  .trow .t-grid span{ display:block; color:var(--ink); font-family:"IBM Plex Mono"; font-size:11.5px; margin-top:1px; }
+
+  .note-card{ background:var(--accent-soft); border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; font-size:13px; line-height:1.5; white-space:pre-wrap; }
+
+  .status-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .status-tile{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:10px 12px; }
+  .status-tile .l{ font-size:11px; color:var(--ink-soft); margin-bottom:3px; }
+  .status-tile .v{ font-family:"IBM Plex Mono"; font-size:13px; }
+  .status-tile.good{ background:var(--good-soft); border-color:transparent; }
+  .status-tile.warn{ background:var(--warn-soft); border-color:transparent; }
+  .status-tile.bad{ background:var(--bad-soft); border-color:transparent; }
+
+  .field{ margin-bottom:12px; }
+  .field label{ display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:5px; }
+  .field input, .field select, .field textarea{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--ink); font-size:14px; font-family:inherit; }
+  .field input.mono, .field textarea.mono{ font-family:"IBM Plex Mono"; font-size:13px; }
+  .field input:focus, .field select:focus, .field textarea:focus{ outline:2px solid var(--accent); outline-offset:-1px; }
+  .field textarea{ resize:vertical; min-height:64px; }
+  .row2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+  .rep-item{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:10px; position:relative; }
+  .rep-item .rm{ position:absolute; top:8px; right:8px; width:26px; height:26px; border-radius:50%; border:none; background:var(--bad-soft); color:var(--bad); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .rep-item .rm svg{ width:13px; height:13px; }
+  .rep-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .rep-grid.cols3{ grid-template-columns:1fr 1fr 1fr; }
+  .rep-grid .full{ grid-column:1/-1; }
+  .rep-grid label{ font-size:10.5px; color:var(--ink-faint); display:block; margin-bottom:3px; text-transform:uppercase; letter-spacing:.03em; }
+  .rep-grid input{ width:100%; padding:8px 9px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--ink); font-size:12.5px; font-family:"IBM Plex Mono"; }
+  .rep-grid input:focus{ outline:2px solid var(--accent); outline-offset:-1px; }
+  .rep-item.fixed .t-label{ font-weight:600; font-size:13px; margin-bottom:8px; }
+
+  .add-row-btn{ width:100%; padding:10px; border-radius:10px; border:1px dashed var(--border); background:transparent; color:var(--accent); font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; }
+  .add-row-btn svg{ width:15px; height:15px; }
+
+  .form-actions{ position:fixed; left:0; right:0; bottom:0; z-index:41; max-width:640px; margin:0 auto; background:var(--bg); border-top:1px solid var(--border); padding:12px 16px 12px; display:flex; gap:10px; }
+  .btn{ flex:1; padding:12px; border-radius:11px; border:none; font-size:14.5px; font-weight:600; cursor:pointer; font-family:inherit; }
+  .btn.primary{ background:var(--accent); color:var(--accent-ink); }
+  .btn.ghost{ background:var(--surface); color:var(--ink); border:1px solid var(--border); }
+
+  .banner{ margin:0 16px 12px; padding:10px 12px; border-radius:11px; background:var(--warn-soft); color:var(--warn); font-size:12.5px; display:flex; gap:8px; align-items:flex-start; line-height:1.4; }
+  .banner svg{ width:15px; height:15px; flex:none; margin-top:1px; }
+
+  .modal-backdrop{ position:fixed; inset:0; background:rgba(10,18,16,0.45); z-index:50; display:flex; align-items:flex-end; justify-content:center; opacity:0; pointer-events:none; transition:opacity .15s; }
+  .modal-backdrop.open{ opacity:1; pointer-events:auto; }
+  @media (min-width:601px){ .modal-backdrop{ align-items:center; } }
+  .modal{ background:var(--surface); border-radius:16px 16px 0 0; padding:20px; width:100%; max-width:400px; transform:translateY(16px); transition:transform .15s; }
+  .modal-backdrop.open .modal{ transform:translateY(0); }
+  @media (min-width:601px){ .modal{ border-radius:16px; margin-bottom:20px; } }
+  .modal h3{ margin:0 0 6px; font-size:15.5px; }
+  .modal p{ margin:0 0 16px; font-size:13.5px; color:var(--ink-soft); line-height:1.45; }
+  .modal .row{ display:flex; gap:10px; }
+
+  .toast{ position:fixed; left:50%; bottom:26px; transform:translate(-50%, 8px); z-index:60; background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:11px; font-size:13px; opacity:0; transition:opacity .18s, transform .18s; pointer-events:none; max-width:88%; text-align:center; }
+  .toast.show{ opacity:1; transform:translate(-50%, 0); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top" id="topHeader">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a5 5 0 0 0-5 5v3a5 5 0 0 0 10 0V7a5 5 0 0 0-5-5Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/><circle cx="12" cy="12" r="0.5" fill="currentColor"/></svg>
+      </div>
+      <div>
+        <h1>Parque de Ecógrafos</h1>
+        <p id="subtitle">Cargando…</p>
+        <p class="path">ECOS DATOS.xlsx</p>
+      </div>
+    </div>
+    <div class="search-row">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="search" type="text" placeholder="Buscar por hospital, modelo o nº de serie…" autocomplete="off">
+      <button class="clear-search" id="clearSearch" aria-label="Borrar búsqueda">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <div id="banner-slot"></div>
+  <div class="stats" id="stats"></div>
+
+  <main><div class="list" id="list"></div></main>
+
+  <button class="fab" id="fabAdd" aria-label="Añadir equipo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+
+  <div class="sheet" id="detailSheet"></div>
+  <div class="sheet" id="formSheet"></div>
+
+  <div class="modal-backdrop" id="confirmModal">
+    <div class="modal">
+      <h3 id="confirmTitle">¿Eliminar equipo?</h3>
+      <p id="confirmBody"></p>
+      <div class="row">
+        <button class="btn ghost" id="confirmCancel">Cancelar</button>
+        <button class="btn primary" id="confirmOk" style="background:var(--bad)">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var ICONS = {
+    pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>',
+    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
+    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+    box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v8a1 1 0 0 1-.5.87l-8 4.62a1 1 0 0 1-1 0l-8-4.62A1 1 0 0 1 3 16V8a1 1 0 0 1 .5-.87l8-4.62a1 1 0 0 1 1 0l8 4.62A1 1 0 0 1 21 8Z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg>',
+    warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>',
+    refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v6h-6"/></svg>'
+  };
+
+  function normalize(str){ return (str||"").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,""); }
+  function isReal(v){ return v !== null && v !== undefined && String(v).trim() !== "" && String(v).trim() !== "-"; }
+  function esc(v){ return (v===null||v===undefined) ? "" : String(v).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function fmtDate(iso){
+    if(!isReal(iso)) return null;
+    var d = new Date(iso+"T00:00:00");
+    if(isNaN(d.getTime())) return esc(iso);
+    return d.toLocaleDateString("es-ES", {day:"2-digit", month:"short", year:"numeric"});
+  }
+  function daysSince(iso){
+    if(!isReal(iso)) return null;
+    var d = new Date(iso+"T00:00:00");
+    if(isNaN(d.getTime())) return null;
+    return Math.round((Date.now() - d.getTime()) / 86400000);
+  }
+  function estadoRevision(iso){
+    var d = daysSince(iso);
+    if(d === null) return {label:"Sin revisión", cls:"muted"};
+    if(d < 0) return {label:"Programada", cls:"good"};
+    if(d <= 180) return {label:"Revisado", cls:"good"};
+    if(d <= 365) return {label:"Revisar pronto", cls:"warn"};
+    return {label:"Revisión atrasada", cls:"bad"};
+  }
+
+  var state = { equipos: [], query: "", hospitalFilter: null, editingOriginalSn: null, loadError: null };
+
+  var $ = function(sel){ return document.querySelector(sel); };
+  var listEl = $("#list"), chipsEl = $("#chips"), statsEl = $("#stats"), subtitleEl = $("#subtitle");
+  var bannerSlot = $("#banner-slot");
+  var detailSheet = $("#detailSheet"), formSheet = $("#formSheet");
+  var toastEl = $("#toast");
+
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function(){ toastEl.classList.remove("show"); }, 2600);
+  }
+
+  // ---------- API ----------
+  function api(method, path, body){
+    return fetch(path, {
+      method: method,
+      headers: body ? {"Content-Type":"application/json"} : undefined,
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function(res){
+      return res.json().then(function(data){
+        if(!res.ok) throw new Error(data.error || ("Error " + res.status));
+        return data;
+      });
+    });
+  }
+
+  function loadEquipos(silent){
+    return api("GET", "/api/equipos").then(function(data){
+      state.equipos = data;
+      state.loadError = null;
+      renderAll();
+    }).catch(function(err){
+      state.loadError = err.message;
+      if(!silent) renderAll();
+    });
+  }
+
+  // ---------- data access ----------
+  function filteredEquipos(){
+    var q = normalize(state.query);
+    return state.equipos.filter(function(e){
+      if(state.hospitalFilter && e.hospital !== state.hospitalFilter) return false;
+      if(!q) return true;
+      var hay = normalize([e.hospital, e.modelo, e.sn].filter(isReal).join(" "));
+      return hay.indexOf(q) !== -1;
+    }).sort(function(a,b){
+      var ha = a.hospital || "￿", hb = b.hospital || "￿";
+      if(ha !== hb) return ha < hb ? -1 : 1;
+      return (a.modelo||"").localeCompare(b.modelo||"");
+    });
+  }
+
+  function uniqueHospitals(){
+    var set = {};
+    state.equipos.forEach(function(e){ if(isReal(e.hospital)) set[e.hospital] = (set[e.hospital]||0)+1; });
+    return Object.keys(set).sort().map(function(h){ return {name:h, count:set[h]}; });
+  }
+
+  function renderChips(){
+    var hospitals = uniqueHospitals();
+    if(hospitals.length === 0){ chipsEl.innerHTML = ""; return; }
+    chipsEl.innerHTML = hospitals.map(function(h){
+      var active = state.hospitalFilter === h.name;
+      return '<button class="chip'+(active?' active':'')+'" data-hosp="'+esc(h.name)+'">'+esc(h.name)+' <span class="n">'+h.count+'</span></button>';
+    }).join("");
+  }
+
+  function renderStats(){
+    var total = state.equipos.length;
+    var hospitals = uniqueHospitals().length;
+    var atrasados = state.equipos.filter(function(e){ return estadoRevision(e.ultimaRevisionPM).cls === "bad"; }).length;
+    statsEl.innerHTML =
+      '<div class="stat-tile"><div class="v">'+total+'</div><div class="l">Equipos</div></div>'+
+      '<div class="stat-tile"><div class="v">'+hospitals+'</div><div class="l">Hospitales / centros</div></div>'+
+      '<div class="stat-tile'+(atrasados>0?' bad':'')+'"><div class="v">'+atrasados+'</div><div class="l">Revisión atrasada</div></div>';
+  }
+
+  function renderBanner(){
+    if(state.loadError){
+      bannerSlot.innerHTML = '<div class="banner">'+ICONS.warn+'<span>'+esc(state.loadError)+' <a href="#" id="retryLoad" style="color:inherit;text-decoration:underline;">Reintentar</a></span></div>';
+      var retry = $("#retryLoad"); if(retry) retry.onclick = function(ev){ ev.preventDefault(); loadEquipos(); };
+    } else {
+      bannerSlot.innerHTML = "";
+    }
+  }
+
+  function renderList(){
+    var items = filteredEquipos();
+    subtitleEl.textContent = state.equipos.length + (state.equipos.length===1 ? " equipo registrado" : " equipos registrados");
+    if(items.length === 0){
+      listEl.innerHTML = '<div class="empty">'+ICONS.box+
+        '<strong>'+(state.equipos.length===0 ? "Todavía no hay equipos" : "Sin resultados")+'</strong>'+
+        '<p>'+(state.equipos.length===0 ? "Añade el primero con el botón +." : "Prueba con otro hospital, modelo o número de serie.")+'</p></div>';
+      return;
+    }
+    listEl.innerHTML = items.map(function(e){
+      var estado = estadoRevision(e.ultimaRevisionPM);
+      var hospHtml = isReal(e.hospital)
+        ? '<div class="card-hosp">'+ICONS.pin+'<span>'+esc(e.hospital)+'</span></div>'
+        : '<div class="card-hosp unset">'+ICONS.pin+'<span>Sin hospital asignado</span></div>';
+      var metaBits = [];
+      if(isReal(e.swVersion)) metaBits.push("SW "+esc(e.swVersion));
+      var pmDate = fmtDate(e.ultimaRevisionPM);
+      if(pmDate) metaBits.push("PM "+pmDate);
+      return '<div class="card" data-sn="'+esc(e.sn)+'">'+
+        '<div class="card-top">'+
+          '<div><div class="card-modelo">'+esc(e.modelo||"(sin modelo)")+'</div><div class="card-sn">S/N '+esc(e.sn)+'</div></div>'+
+          '<span class="badge '+estado.cls+'">'+estado.label+'</span>'+
+        '</div>'+
+        hospHtml+
+        (metaBits.length ? '<div class="card-meta">'+metaBits.map(esc).join('<span>·</span>')+'</div>' : '')+
+      '</div>';
+    }).join("");
+  }
+
+  function renderAll(){ renderBanner(); renderChips(); renderStats(); renderList(); }
+
+  function kvRow(label, value, opts){
+    opts = opts || {};
+    if(!isReal(value)) return '<div class="kv-row"><span class="k">'+esc(label)+'</span><span class="v empty-v">—</span></div>';
+    var display = opts.date ? (fmtDate(value)||esc(value)) : esc(value);
+    return '<div class="kv-row"><span class="k">'+esc(label)+'</span><span class="v">'+display+'</span></div>';
+  }
+
+  function renderDetail(sn){
+    var e = state.equipos.find(function(x){ return x.sn === sn; });
+    if(!e){ closeSheet(detailSheet); return; }
+    var estado = estadoRevision(e.ultimaRevisionPM);
+
+    var componentesHtml = (e.componentes||[]).map(function(c){
+      return '<div class="trow"><div class="t-name">'+esc(c.nombre||"Componente")+'</div><div class="t-grid">'+
+        '<div>Versión<span>'+esc(isReal(c.version)?c.version:"—")+'</span></div>'+
+        '<div>Máx. SW/HW<span>'+esc(isReal(c.maxSw)?c.maxSw:"—")+'</span></div>'+
+        '<div style="grid-column:1/-1">Código 12NC<span>'+esc(isReal(c.codigo12nc)?c.codigo12nc:"—")+'</span></div>'+
+      '</div></div>';
+    }).join("");
+
+    var sondasHtml = (e.sondas||[]).length ? (e.sondas||[]).map(function(s){
+      return '<div class="trow"><div class="t-name">'+esc(isReal(s.nombre)?s.nombre:"Sonda")+'</div><div class="t-grid">'+
+        '<div>Nº de serie<span>'+esc(isReal(s.serie)?s.serie:"—")+'</span></div>'+
+        '<div>Código 12NC<span>'+esc(isReal(s.codigo12nc)?s.codigo12nc:"—")+'</span></div>'+
+        (isReal(s.pass)?'<div>PASS<span>'+esc(s.pass)+'</span></div>':'')+
+      '</div></div>';
+    }).join("") : '<div class="trow" style="color:var(--ink-faint);font-style:italic;">Sin sondas registradas</div>';
+
+    var nodosHtml = (e.nodosDicom||[]).length ? (e.nodosDicom||[]).map(function(n){
+      return '<div class="trow"><div class="t-name">'+esc(isReal(n.nombre)?n.nombre:"Nodo DICOM")+'</div><div class="t-grid">'+
+        '<div>AET<span>'+esc(isReal(n.aet)?n.aet:"—")+'</span></div>'+
+        '<div>Puerto<span>'+esc(isReal(n.puerto)?n.puerto:"—")+'</span></div>'+
+        '<div style="grid-column:1/-1">IP<span>'+esc(isReal(n.ip)?n.ip:"—")+'</span></div>'+
+      '</div></div>';
+    }).join("") : '<div class="trow" style="color:var(--ink-faint);font-style:italic;">Sin nodos DICOM registrados</div>';
+
+    var dicom = e.dicom || {};
+
+    detailSheet.innerHTML =
+      '<div class="sheet-header">'+
+        '<button class="icon-btn" id="detBack">'+ICONS.back+'</button>'+
+        '<div class="sheet-title"><h2>'+esc(e.modelo||"Equipo")+'</h2><p>S/N '+esc(e.sn)+'</p></div>'+
+        '<button class="icon-btn" id="detEdit">'+ICONS.edit+'</button>'+
+        '<button class="icon-btn danger" id="detDelete">'+ICONS.trash+'</button>'+
+      '</div>'+
+      '<div class="sheet-body">'+
+        '<div class="section"><div class="section-title">Estado</div>'+
+          '<div class="status-grid">'+
+            '<div class="status-tile '+(estado.cls!=="muted"?estado.cls:"")+'"><div class="l">Última revisión PM</div><div class="v">'+(fmtDate(e.ultimaRevisionPM)||"—")+'</div></div>'+
+            '<div class="status-tile"><div class="l">Hospital / centro</div><div class="v" style="font-family:inherit;">'+(isReal(e.hospital)?esc(e.hospital):"Sin asignar")+'</div></div>'+
+          '</div>'+
+        '</div>'+
+        '<div class="section"><div class="section-title">Datos generales</div><div class="kv-card">'+
+          kvRow("Modelo", e.modelo)+ kvRow("Nº de serie", e.sn)+ kvRow("Versión S.W.", e.swVersion)+
+          kvRow("Versión H.W.", e.hwVersion)+ kvRow("Fecha instalación", e.fechaInstalacion, {date:true})+
+        '</div></div>'+
+        (isReal(e.notas) ? '<div class="section"><div class="section-title">Notas</div><div class="note-card">'+esc(e.notas)+'</div></div>' : '')+
+        '<div class="section"><div class="section-title">Componentes</div><div class="table-card">'+componentesHtml+'</div></div>'+
+        '<div class="section"><div class="section-title">Sondas</div><div class="table-card">'+sondasHtml+'</div></div>'+
+        '<div class="section"><div class="section-title">Red DICOM local</div><div class="kv-card">'+
+          kvRow("IP", dicom.ip)+ kvRow("Máscara", dicom.mask)+ kvRow("Gateway", dicom.gateway)+
+          kvRow("AET", dicom.aet)+ kvRow("Puerto", dicom.port)+ kvRow("Lector DVD", dicom.dvdPc)+
+        '</div></div>'+
+        (isReal(e.notasDicom) ? '<div class="section"><div class="section-title">Notas de red / DICOM</div><div class="note-card">'+esc(e.notasDicom)+'</div></div>' : '')+
+        '<div class="section"><div class="section-title">Nodos DICOM</div><div class="table-card">'+nodosHtml+'</div></div>'+
+        '<div class="section"><div class="section-title">Mantenimiento</div><div class="status-grid">'+
+          statusTile("Último backup", e.ultimoBackup)+ statusTile("Test general", e.ultimoTestGeneral)+
+          statusTile("Test de sondas", e.ultimoTestSondas)+ statusTile("Test de baterías", e.ultimoTestBaterias)+
+        '</div></div>'+
+      '</div>';
+
+    $("#detBack", detailSheet).onclick = function(){ closeSheet(detailSheet); };
+    $("#detEdit", detailSheet).onclick = function(){ openForm(e); };
+    $("#detDelete", detailSheet).onclick = function(){ confirmDelete(e); };
+    openSheet(detailSheet);
+  }
+
+  function statusTile(label, iso){
+    var estado = estadoRevision(iso);
+    var cls = (isReal(iso) ? estado.cls : "");
+    var val = fmtDate(iso) || "—";
+    return '<div class="status-tile'+(cls&&cls!=="muted"?(" "+cls):"")+'"><div class="l">'+esc(label)+'</div><div class="v">'+val+'</div></div>';
+  }
+
+  function openSheet(sheet){ sheet.classList.add("open"); document.body.style.overflow = "hidden"; }
+  function closeSheet(sheet){ sheet.classList.remove("open"); if(!detailSheet.classList.contains("open") && !formSheet.classList.contains("open")) document.body.style.overflow = ""; }
+
+  // ---------- form ----------
+  var COMPONENTE_LABELS = ["Power Regulator","ACB","PC / Computer Assembly","Acquisition Module"];
+  var repCounter = 0;
+
+  function blankEquipo(){
+    return { sn:"", modelo:"", hospital:"", swVersion:"", hwVersion:"", notas:"",
+      fechaInstalacion:"", ultimaRevisionPM:"", ultimoBackup:"", ultimoTestGeneral:"", ultimoTestSondas:"", ultimoTestBaterias:"", borrarAvisosMtto:"",
+      dicom:{ip:"",mask:"",gateway:"",aet:"",port:"",dvdPc:""}, notasDicom:"",
+      componentes: COMPONENTE_LABELS.map(function(n){ return {nombre:n,version:"",maxSw:"",codigo12nc:""}; }),
+      sondas:[], nodosDicom:[] };
+  }
+
+  function componenteItem(idx, item){
+    return '<div class="rep-item fixed"><div class="t-label">'+esc(item.nombre)+'</div>'+
+      '<div class="rep-grid cols3">'+
+        '<div><label>Versión</label><input data-comp-idx="'+idx+'" data-f="version" value="'+esc(item.version)+'"></div>'+
+        '<div><label>Máx. SW/HW</label><input data-comp-idx="'+idx+'" data-f="maxSw" value="'+esc(item.maxSw)+'"></div>'+
+        '<div><label>Código 12NC</label><input data-comp-idx="'+idx+'" data-f="codigo12nc" value="'+esc(item.codigo12nc)+'"></div>'+
+      '</div></div>';
+  }
+
+  function repItem(kind, idx, item){
+    var id = "rep_"+(repCounter++);
+    var fieldsHtml = "";
+    if(kind === "sondas"){
+      fieldsHtml =
+        '<div class="rep-grid full"><label>Sonda</label><input data-f="nombre" value="'+esc(item.nombre)+'" placeholder="p. ej. X5-1"></div>'+
+        '<div class="rep-grid" style="margin-top:8px;"><div><label>Nº de serie</label><input data-f="serie" value="'+esc(item.serie)+'"></div>'+
+        '<div><label>Código 12NC</label><input data-f="codigo12nc" value="'+esc(item.codigo12nc)+'"></div></div>'+
+        '<div class="rep-grid" style="margin-top:8px;"><div class="full"><label>PASS</label><input data-f="pass" value="'+esc(item.pass)+'"></div></div>';
+    } else { // nodosDicom
+      fieldsHtml =
+        '<div class="rep-grid full"><label>Nombre del nodo</label><input data-f="nombre" value="'+esc(item.nombre)+'" placeholder="p. ej. PACS"></div>'+
+        '<div class="rep-grid" style="margin-top:8px;"><div><label>AET</label><input data-f="aet" value="'+esc(item.aet)+'"></div>'+
+        '<div><label>Puerto</label><input data-f="puerto" value="'+esc(item.puerto)+'"></div></div>'+
+        '<div class="rep-grid" style="margin-top:8px;"><div class="full"><label>IP</label><input data-f="ip" value="'+esc(item.ip)+'"></div></div>';
+    }
+    return '<div class="rep-item" data-kind="'+kind+'" data-idx="'+idx+'" id="'+id+'">'+
+      '<button type="button" class="rm" data-remove="'+kind+'" data-idx="'+idx+'">'+ICONS.x+'</button>'+
+      fieldsHtml+'</div>';
+  }
+
+  function repListHtml(kind, items, label){
+    return '<div class="section"><div class="section-title">'+esc(label)+'</div>'+
+      '<div id="rep_'+kind+'">'+items.map(function(it,i){ return repItem(kind, i, it); }).join("")+'</div>'+
+      '<button type="button" class="add-row-btn" data-add="'+kind+'">'+ICONS.plus+' Añadir</button>'+
+    '</div>';
+  }
+
+  function dateField(name, label, value){
+    return '<div class="field"><label>'+esc(label)+'</label><input type="date" data-f="'+name+'" value="'+esc(value)+'"></div>';
+  }
+
+  function openForm(existing){
+    var data = existing ? JSON.parse(JSON.stringify(existing)) : blankEquipo();
+    ["fechaInstalacion","ultimaRevisionPM","ultimoBackup","ultimoTestGeneral","ultimoTestSondas","ultimoTestBaterias","borrarAvisosMtto"].forEach(function(k){
+      if(!isReal(data[k]) || !/^\d{4}-\d{2}-\d{2}$/.test(data[k])) data[k] = "";
+    });
+    data.dicom = data.dicom || {ip:"",mask:"",gateway:"",aet:"",port:"",dvdPc:""};
+    if(!data.componentes || data.componentes.length !== 4){
+      data.componentes = COMPONENTE_LABELS.map(function(n){ return {nombre:n,version:"",maxSw:"",codigo12nc:""}; });
+    } else {
+      data.componentes = data.componentes.map(function(c,i){ return {nombre:COMPONENTE_LABELS[i],version:c.version||"",maxSw:c.maxSw||"",codigo12nc:c.codigo12nc||""}; });
+    }
+    data.sondas = data.sondas || [];
+    data.nodosDicom = data.nodosDicom || [];
+    state.editingOriginalSn = existing ? existing.sn : null;
+
+    formSheet.innerHTML =
+      '<div class="sheet-header">'+
+        '<button class="icon-btn" id="formCancel">'+ICONS.x+'</button>'+
+        '<div class="sheet-title"><h2>'+(existing?"Editar equipo":"Nuevo equipo")+'</h2></div>'+
+      '</div>'+
+      '<form class="sheet-body" id="equipoForm" novalidate>'+
+        '<div class="section"><div class="section-title">Datos generales</div>'+
+          '<div class="field"><label>Modelo *</label><input data-f="modelo" required value="'+esc(data.modelo)+'" placeholder="p. ej. EPIQ 7G"></div>'+
+          '<div class="field"><label>Nº de serie (S/N) *</label><input class="mono" data-f="sn" required value="'+esc(data.sn)+'" placeholder="p. ej. US115B0087"></div>'+
+          '<div class="field"><label>Hospital / centro</label><input data-f="hospital" value="'+esc(data.hospital)+'" placeholder="p. ej. Miguel Servet - Hemodinámica" list="hospNames"></div>'+
+          '<div class="row2">'+
+            '<div class="field"><label>Versión S.W.</label><input class="mono" data-f="swVersion" value="'+esc(data.swVersion)+'"></div>'+
+            '<div class="field"><label>Versión H.W.</label><input class="mono" data-f="hwVersion" value="'+esc(data.hwVersion)+'"></div>'+
+          '</div>'+
+          dateField("fechaInstalacion","Fecha de instalación", data.fechaInstalacion)+
+          '<div class="field"><label>Notas</label><textarea data-f="notas" placeholder="Sala, incidencias, avisos…">'+esc(data.notas)+'</textarea></div>'+
+        '</div>'+
+        '<div class="section"><div class="section-title">Componentes</div><div id="rep_componentes">'+
+          data.componentes.map(function(c,i){ return componenteItem(i,c); }).join("")+
+        '</div></div>'+
+        repListHtml("sondas", data.sondas, "Sondas")+
+        '<div class="section"><div class="section-title">Red DICOM local</div>'+
+          '<div class="row2">'+
+            '<div class="field"><label>IP</label><input class="mono" data-f="dicom.ip" value="'+esc(data.dicom.ip)+'"></div>'+
+            '<div class="field"><label>Máscara</label><input class="mono" data-f="dicom.mask" value="'+esc(data.dicom.mask)+'"></div>'+
+          '</div>'+
+          '<div class="row2">'+
+            '<div class="field"><label>Gateway</label><input class="mono" data-f="dicom.gateway" value="'+esc(data.dicom.gateway)+'"></div>'+
+            '<div class="field"><label>AET</label><input class="mono" data-f="dicom.aet" value="'+esc(data.dicom.aet)+'"></div>'+
+          '</div>'+
+          '<div class="row2">'+
+            '<div class="field"><label>Puerto</label><input class="mono" data-f="dicom.port" value="'+esc(data.dicom.port)+'"></div>'+
+            '<div class="field"><label>Lector DVD</label><select data-f="dicom.dvdPc">'+
+              ['', 'SI', 'NO'].map(function(o){ return '<option value="'+o+'"'+(data.dicom.dvdPc===o?' selected':'')+'>'+(o||"—")+'</option>'; }).join("")+
+            '</select></div>'+
+          '</div>'+
+          '<div class="field"><label>Notas de red / DICOM</label><textarea data-f="notasDicom">'+esc(data.notasDicom)+'</textarea></div>'+
+        '</div>'+
+        repListHtml("nodosDicom", data.nodosDicom, "Nodos DICOM")+
+        '<div class="section"><div class="section-title">Mantenimiento</div>'+
+          dateField("ultimaRevisionPM","Última revisión PM", data.ultimaRevisionPM)+
+          dateField("ultimoBackup","Último backup", data.ultimoBackup)+
+          dateField("ultimoTestGeneral","Último test general", data.ultimoTestGeneral)+
+          dateField("ultimoTestSondas","Último test de sondas", data.ultimoTestSondas)+
+          dateField("ultimoTestBaterias","Último test de baterías", data.ultimoTestBaterias)+
+          dateField("borrarAvisosMtto","Borrado de avisos de mtto.", data.borrarAvisosMtto)+
+        '</div>'+
+      '</form>';
+
+    formSheet.insertAdjacentHTML("beforeend",
+      '<div class="form-actions"><button type="button" class="btn ghost" id="formCancel2">Cancelar</button>'+
+      '<button type="submit" form="equipoForm" class="btn primary" id="formSave">'+(existing?"Guardar cambios":"Añadir equipo")+'</button></div>'
+    );
+    formSheet.insertAdjacentHTML("beforeend",
+      '<datalist id="hospNames">'+uniqueHospitals().map(function(h){ return '<option value="'+esc(h.name)+'">'; }).join("")+'</datalist>'
+    );
+
+    wireForm(data);
+    openSheet(formSheet);
+  }
+
+  function wireForm(data){
+    function close(){ closeSheet(formSheet); }
+    $("#formCancel", formSheet).onclick = close;
+    $("#formCancel2", formSheet).onclick = close;
+
+    formSheet.querySelectorAll('[data-add]').forEach(function(btn){
+      btn.onclick = function(){
+        var kind = btn.getAttribute("data-add");
+        data[kind] = data[kind] || [];
+        var blank = kind === "sondas" ? {nombre:"",serie:"",codigo12nc:"",pass:""} : {nombre:"",aet:"",ip:"",puerto:""};
+        data[kind].push(blank);
+        var container = formSheet.querySelector("#rep_"+kind);
+        container.insertAdjacentHTML("beforeend", repItem(kind, data[kind].length-1, blank));
+        wireRemoveButtons(data);
+      };
+    });
+
+    wireRemoveButtons(data);
+
+    formSheet.querySelector("#equipoForm").addEventListener("submit", function(ev){
+      ev.preventDefault();
+      submitForm();
+    });
+  }
+
+  function wireRemoveButtons(data){
+    formSheet.querySelectorAll('[data-remove]').forEach(function(btn){
+      btn.onclick = function(){
+        var kind = btn.getAttribute("data-remove");
+        btn.closest(".rep-item").remove();
+        renderRepList(kind, data);
+      };
+    });
+  }
+
+  function renderRepList(kind, data){
+    var container = formSheet.querySelector("#rep_"+kind);
+    var items = Array.prototype.slice.call(container.querySelectorAll(".rep-item")).map(function(el){
+      var obj = {};
+      el.querySelectorAll("[data-f]").forEach(function(inp){ obj[inp.getAttribute("data-f")] = inp.value.trim(); });
+      return obj;
+    });
+    data[kind] = items;
+    container.innerHTML = items.map(function(it,i){ return repItem(kind, i, it); }).join("");
+    wireRemoveButtons(data);
+  }
+
+  function readRepArray(kind){
+    var container = formSheet.querySelector("#rep_"+kind);
+    if(!container) return [];
+    return Array.prototype.slice.call(container.querySelectorAll(".rep-item")).map(function(el){
+      var obj = {};
+      el.querySelectorAll("[data-f]").forEach(function(inp){ obj[inp.getAttribute("data-f")] = inp.value.trim(); });
+      return obj;
+    }).filter(function(o){ return Object.keys(o).some(function(k){ return isReal(o[k]); }); });
+  }
+
+  function readComponentes(){
+    var container = formSheet.querySelector("#rep_componentes");
+    return COMPONENTE_LABELS.map(function(label, i){
+      var el = container.querySelector('[data-comp-idx="'+i+'"][data-f="version"]');
+      var wrapper = el ? el.closest(".rep-item") : null;
+      var get = function(f){ var inp = wrapper ? wrapper.querySelector('[data-f="'+f+'"]') : null; return inp ? inp.value.trim() : ""; };
+      return { nombre: label, version: get("version"), maxSw: get("maxSw"), codigo12nc: get("codigo12nc") };
+    });
+  }
+
+  function submitForm(){
+    var form = formSheet.querySelector("#equipoForm");
+    var get = function(name){ var el = form.querySelector('[data-f="'+name+'"]'); return el ? el.value.trim() : ""; };
+
+    var sn = get("sn"), modelo = get("modelo");
+    if(!sn || !modelo){ toast("Completa al menos el modelo y el número de serie."); return; }
+
+    var isNew = !state.editingOriginalSn;
+
+    var record = {
+      sn: sn, modelo: modelo,
+      hospital: get("hospital") || null, swVersion: get("swVersion") || null, hwVersion: get("hwVersion") || null,
+      notas: get("notas") || null, fechaInstalacion: get("fechaInstalacion") || null,
+      ultimaRevisionPM: get("ultimaRevisionPM") || null, ultimoBackup: get("ultimoBackup") || null,
+      ultimoTestGeneral: get("ultimoTestGeneral") || null, ultimoTestSondas: get("ultimoTestSondas") || null,
+      ultimoTestBaterias: get("ultimoTestBaterias") || null, borrarAvisosMtto: get("borrarAvisosMtto") || null,
+      dicom: { ip: get("dicom.ip")||null, mask: get("dicom.mask")||null, gateway: get("dicom.gateway")||null,
+        aet: get("dicom.aet")||null, port: get("dicom.port")||null, dvdPc: get("dicom.dvdPc")||null },
+      notasDicom: get("notasDicom") || null,
+      componentes: readComponentes(),
+      sondas: readRepArray("sondas"),
+      nodosDicom: readRepArray("nodosDicom")
+    };
+
+    var save = isNew ? api("POST", "/api/equipos", record) : api("PUT", "/api/equipos/" + encodeURIComponent(state.editingOriginalSn), record);
+    save.then(function(){
+      toast(isNew ? "Equipo añadido." : "Cambios guardados.");
+      closeSheet(formSheet); closeSheet(detailSheet);
+      return loadEquipos(true);
+    }).catch(function(err){ toast("No se ha podido guardar: " + err.message); });
+  }
+
+  // ---------- delete ----------
+  var pendingDelete = null;
+  function confirmDelete(e){
+    pendingDelete = e;
+    $("#confirmTitle").textContent = "¿Eliminar este equipo?";
+    $("#confirmBody").textContent = (e.modelo||"Equipo") + " · S/N " + e.sn + (isReal(e.hospital) ? (" · " + e.hospital) : "") + ". Esta acción no se puede deshacer.";
+    $("#confirmModal").classList.add("open");
+  }
+  $("#confirmCancel").onclick = function(){ $("#confirmModal").classList.remove("open"); pendingDelete = null; };
+  $("#confirmOk").onclick = function(){
+    if(!pendingDelete) return;
+    var e = pendingDelete;
+    $("#confirmModal").classList.remove("open");
+    api("DELETE", "/api/equipos/" + encodeURIComponent(e.sn)).then(function(){
+      toast("Equipo eliminado.");
+      closeSheet(detailSheet);
+      return loadEquipos(true);
+    }).catch(function(err){ toast("No se ha podido eliminar: " + err.message); });
+    pendingDelete = null;
+  };
+
+  // ---------- events ----------
+  listEl.addEventListener("click", function(ev){
+    var card = ev.target.closest(".card");
+    if(card) renderDetail(card.getAttribute("data-sn"));
+  });
+  chipsEl.addEventListener("click", function(ev){
+    var chip = ev.target.closest(".chip");
+    if(!chip) return;
+    var h = chip.getAttribute("data-hosp");
+    state.hospitalFilter = (state.hospitalFilter === h) ? null : h;
+    renderChips(); renderList();
+  });
+  var searchInput = $("#search"), clearBtn = $("#clearSearch");
+  searchInput.addEventListener("input", function(){
+    state.query = searchInput.value;
+    clearBtn.classList.toggle("show", !!state.query);
+    renderList();
+  });
+  clearBtn.addEventListener("click", function(){
+    searchInput.value = ""; state.query = ""; clearBtn.classList.remove("show"); renderList(); searchInput.focus();
+  });
+  $("#fabAdd").addEventListener("click", function(){ openForm(null); });
+  var header = $("#topHeader");
+  window.addEventListener("scroll", function(){ header.classList.toggle("scrolled", window.scrollY > 2); });
+
+  // ---------- boot ----------
+  renderAll();
+  loadEquipos();
+  setInterval(function(){
+    if(!formSheet.classList.contains("open")) loadEquipos(true);
+  }, 8000);
+
+})();
+</script>
+</body>
+</html>

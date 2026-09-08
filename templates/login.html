@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Parque de Ecógrafos — Acceso</title>
+<style>
+  :root{ --bg:#F2F6F5; --surface:#FFFFFF; --border:#DAE6E3; --ink:#152420; --ink-soft:#5B6E6A; --accent:#0E6E63; --accent-ink:#FFFFFF; --bad:#C13F3F; --bad-soft:#FBE7E7; }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{ background:var(--bg); color:var(--ink); font-family:-apple-system,"Segoe UI",sans-serif; display:flex; align-items:center; justify-content:center; }
+  .card{ background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:32px 28px; width:100%; max-width:340px; box-shadow:0 8px 24px -12px rgba(16,32,28,0.18); }
+  h1{ font-size:17px; margin:0 0 4px; }
+  p.sub{ margin:0 0 20px; font-size:12.5px; color:var(--ink-soft); }
+  label{ display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:6px; }
+  input{ width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--ink); font-size:14px; }
+  input:focus{ outline:2px solid var(--accent); outline-offset:-1px; }
+  button{ margin-top:16px; width:100%; padding:12px; border-radius:11px; border:none; background:var(--accent); color:var(--accent-ink); font-size:14.5px; font-weight:600; cursor:pointer; }
+  .error{ margin-top:12px; padding:9px 12px; border-radius:10px; background:var(--bad-soft); color:var(--bad); font-size:12.5px; }
+</style>
+</head>
+<body>
+  <form class="card" method="post">
+    <h1>Parque de Ecógrafos</h1>
+    <p class="sub">Introduce la contraseña de acceso.</p>
+    <label for="password">Contraseña</label>
+    <input id="password" name="password" type="password" autofocus required>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <button type="submit">Entrar</button>
+  </form>
+</body>
+</html>
