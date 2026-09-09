@@ -491,8 +491,12 @@ def _log_historial(wb, sn, tipo, detalle, fecha=None):
     return new_id
 
 
+HISTORIAL_MANTENIMIENTO_KEYS = ("ultimaRevisionPM",)  # solo revisión PM va al historial
+
+
 def _log_mantenimiento_changes(wb, sn, before, after):
-    for key, label in MANTENIMIENTO_LABELS.items():
+    for key in HISTORIAL_MANTENIMIENTO_KEYS:
+        label = MANTENIMIENTO_LABELS[key]
         old_v = before.get(key)
         new_v = after.get(key)
         if new_v and new_v != old_v:
