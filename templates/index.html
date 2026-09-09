@@ -649,7 +649,7 @@
   function closeSheet(sheet){ sheet.classList.remove("open"); if(!detailSheet.classList.contains("open") && !formSheet.classList.contains("open")) document.body.style.overflow = ""; }
 
   // ---------- form ----------
-  var COMPONENTE_LABELS = ["Power Regulator","ACB","PC / Computer Assembly","Acquisition Module"];
+  var COMPONENTE_LABELS = ["Power Regulator","ACB"];
   var repCounter = 0;
 
   function blankEquipo(){
@@ -707,7 +707,7 @@
       if(!isReal(data[k]) || !/^\d{4}-\d{2}-\d{2}$/.test(data[k])) data[k] = "";
     });
     data.dicom = data.dicom || {ip:"",mask:"",gateway:"",aet:"",port:"",dvdPc:""};
-    if(!data.componentes || data.componentes.length !== 4){
+    if(!data.componentes || data.componentes.length !== COMPONENTE_LABELS.length){
       data.componentes = COMPONENTE_LABELS.map(function(n){ return {nombre:n,version:"",maxSw:"",codigo12nc:""}; });
     } else {
       data.componentes = data.componentes.map(function(c,i){ return {nombre:COMPONENTE_LABELS[i],version:c.version||"",maxSw:c.maxSw||"",codigo12nc:c.codigo12nc||""}; });

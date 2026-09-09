@@ -24,8 +24,10 @@ _graph_item = {"drive_id": None, "item_id": None}
 
 _lock = threading.Lock()
 
-COMPONENTE_LABELS = ["Power Regulator", "ACB", "PC / Computer Assembly", "Acquisition Module"]
-COMPONENTE_ROWS = [10, 11, 12, 13]  # A=label(no tocar), B=version, C=maxSw, D=12nc
+COMPONENTE_LABELS = ["Power Regulator", "ACB"]
+COMPONENTE_ROWS = [10, 11]  # A=label(no tocar), B=version, C=maxSw, D=12nc
+# Filas 12/13 (PC / Computer Assembly, Acquisition Module) ya no se muestran en la
+# app (se cambian poco) pero se dejan tal cual en el Excel, no se borran.
 
 SONDAS_HEADER_ROW = 1
 SONDAS_FIRST_ROW = 2
