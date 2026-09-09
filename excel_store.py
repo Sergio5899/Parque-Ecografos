@@ -58,6 +58,30 @@ MANTENIMIENTO_ROWS = {
 
 INVALID_SHEET_CHARS = re.compile(r"[\\/*?:\[\]]")
 
+# ---------------------------------------------------------------------------
+# Hojas nuevas (no forman parte de la plantilla original de cada equipo, así
+# que viven en sus propias hojas para no arriesgar el formato/celdas de la
+# plantilla de equipo). Cada una es una tabla simple: fila 1 = cabecera.
+# ---------------------------------------------------------------------------
+RESERVED_SHEETS = ("META", "HISTORIAL", "AVERIAS")
+
+META_SHEET = "META"
+META_HEADERS = ["SN", "PeriodicidadMeses", "AlertaAtrasadaEnviada"]
+
+HISTORIAL_SHEET = "HISTORIAL"
+HISTORIAL_HEADERS = ["ID", "SN", "Fecha", "Tipo", "Detalle"]
+
+AVERIAS_SHEET = "AVERIAS"
+AVERIAS_HEADERS = ["ID", "SN", "FechaApertura", "Descripcion", "Componente", "Tecnico", "Estado", "FechaResolucion", "NotasResolucion"]
+
+MANTENIMIENTO_LABELS = {
+    "ultimaRevisionPM": "Revisión PM",
+    "ultimoBackup": "Backup",
+    "ultimoTestGeneral": "Test general",
+    "ultimoTestSondas": "Test de sondas",
+    "ultimoTestBaterias": "Test de baterías",
+}
+
 
 def _is_real(v):
     if v is None:
@@ -186,7 +210,18 @@ def list_equipos():
     with _lock:
         wb = _load()
         try:
-            return [_parse_sheet(wb[name]) for name in wb.sheetnames]
+            _, meta_map = _load_meta_map(wb)
+            averias_counts = _count_averias_abiertas(wb)
+            records = []
+            for name in wb.sheetnames:
+                if name in RESERVED_SHEETS:
+                    continue
+                r = _parse_sheet(wb[name])
+                m = meta_map.get(r["sn"], {})
+                r["periodicidadMeses"] = m.get("periodicidadMeses")
+                r["averiasAbiertas"] = averias_counts.get(r["sn"], 0)
+                records.append(r)
+            return records
         finally:
             wb.close()
 
@@ -197,7 +232,12 @@ def get_equipo(sn):
         try:
             if sn not in wb.sheetnames:
                 return None
-            return _parse_sheet(wb[sn])
+            r = _parse_sheet(wb[sn])
+            _, meta_map = _load_meta_map(wb)
+            m = meta_map.get(sn, {})
+            r["periodicidadMeses"] = m.get("periodicidadMeses")
+            r["averiasAbiertas"] = _count_averias_abiertas(wb).get(sn, 0)
+            return r
         finally:
             wb.close()
 
@@ -254,7 +294,13 @@ def _clear_and_write_data(ws, record):
 
 
 def _new_sheet_from_template(wb, sheet_name):
-    template = wb[wb.sheetnames[0]]
+    template = None
+    for name in wb.sheetnames:
+        if name not in RESERVED_SHEETS:
+            template = wb[name]
+            break
+    if template is None:
+        raise RuntimeError("No hay ninguna plantilla de equipo en el Excel para copiar.")
     ws = wb.copy_worksheet(template)
     ws.title = sheet_name
     for i, row in enumerate(COMPONENTE_ROWS):
@@ -270,6 +316,10 @@ class SheetNotFoundError(Exception):
     pass
 
 
+class AveriaNotFoundError(Exception):
+    pass
+
+
 def create_equipo(record):
     sn = sanitize_sheet_name(record.get("sn"))
     if not sn:
@@ -282,6 +332,8 @@ def create_equipo(record):
             ws = _new_sheet_from_template(wb, sn)
             record = dict(record, sn=sn)
             _clear_and_write_data(ws, record)
+            _set_periodicidad(wb, sn, record.get("periodicidadMeses"))
+            _log_historial(wb, sn, "creacion", "Equipo dado de alta.")
             _save(wb)
         finally:
             wb.close()
@@ -298,10 +350,14 @@ def update_equipo(original_sn, record):
             if new_sn != original_sn and new_sn in wb.sheetnames:
                 raise SheetExistsError(new_sn)
             ws = wb[original_sn]
+            before = _parse_sheet(ws)
             record = dict(record, sn=new_sn)
             _clear_and_write_data(ws, record)
             if new_sn != original_sn:
                 ws.title = new_sn
+                _rename_sn_everywhere(wb, original_sn, new_sn)
+            _set_periodicidad(wb, new_sn, record.get("periodicidadMeses"))
+            _log_mantenimiento_changes(wb, new_sn, before, record)
             _save(wb)
         finally:
             wb.close()
@@ -314,7 +370,273 @@ def delete_equipo(sn):
         try:
             if sn not in wb.sheetnames:
                 raise SheetNotFoundError(sn)
+            _log_historial(wb, sn, "eliminacion", "Equipo eliminado del inventario.")
             del wb[sn]
             _save(wb)
         finally:
             wb.close()
+
+
+# ---------------------------------------------------------------------------
+# META (periodicidad de revisión por equipo + estado de la última alerta)
+# ---------------------------------------------------------------------------
+
+def _sheet_rows(ws):
+    """Itera (fila, [valores]) para cada fila de datos no vacía (salta la cabecera)."""
+    for row in range(2, ws.max_row + 1):
+        values = [ws.cell(row=row, column=c).value for c in range(1, ws.max_column + 1)]
+        if any(_is_real(v) for v in values):
+            yield row, values
+
+
+def _get_or_create_sheet(wb, name, headers):
+    if name in wb.sheetnames:
+        return wb[name]
+    ws = wb.create_sheet(name)
+    for i, h in enumerate(headers, start=1):
+        ws.cell(row=1, column=i).value = h
+    return ws
+
+
+def _next_id(ws):
+    max_id = 0
+    for _, values in _sheet_rows(ws):
+        try:
+            max_id = max(max_id, int(values[0]))
+        except (TypeError, ValueError):
+            pass
+    return max_id + 1
+
+
+def _load_meta_map(wb):
+    ws = _get_or_create_sheet(wb, META_SHEET, META_HEADERS)
+    out = {}
+    for row, values in _sheet_rows(ws):
+        sn = _clean(values[0])
+        if not sn:
+            continue
+        out[sn] = {
+            "row": row,
+            "periodicidadMeses": _clean(values[1]) if len(values) > 1 else None,
+            "alertaAtrasadaEnviada": _clean(values[2]) if len(values) > 2 else None,
+        }
+    return ws, out
+
+
+def _get_meta_row(ws, meta_map, sn):
+    if sn in meta_map:
+        return meta_map[sn]["row"]
+    row = ws.max_row + 1
+    ws.cell(row=row, column=1).value = sn
+    meta_map[sn] = {"row": row, "periodicidadMeses": None, "alertaAtrasadaEnviada": None}
+    return row
+
+
+def _set_periodicidad(wb, sn, value):
+    ws, meta_map = _load_meta_map(wb)
+    row = _get_meta_row(ws, meta_map, sn)
+    ws.cell(row=row, column=2).value = value
+
+
+def _rename_sn_everywhere(wb, old_sn, new_sn):
+    ws_meta, meta_map = _load_meta_map(wb)
+    if old_sn in meta_map:
+        ws_meta.cell(row=meta_map[old_sn]["row"], column=1).value = new_sn
+    for sheet_name in (HISTORIAL_SHEET, AVERIAS_SHEET):
+        if sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            for row, values in _sheet_rows(ws):
+                if _clean(values[1]) == old_sn:
+                    ws.cell(row=row, column=2).value = new_sn
+
+
+def get_alertas_estado():
+    """dict SN -> True si ya se avisó de que está atrasado (para no repetir el aviso)."""
+    with _lock:
+        wb = _load()
+        try:
+            _, meta_map = _load_meta_map(wb)
+            return {sn: (str(v.get("alertaAtrasadaEnviada") or "").upper() == "SI") for sn, v in meta_map.items()}
+        finally:
+            wb.close()
+
+
+def set_alertas_estado(estado_por_sn):
+    """estado_por_sn: dict SN -> True/False. Persiste qué equipos ya han generado aviso."""
+    with _lock:
+        wb = _load()
+        try:
+            ws, meta_map = _load_meta_map(wb)
+            for sn, alertado in estado_por_sn.items():
+                row = _get_meta_row(ws, meta_map, sn)
+                ws.cell(row=row, column=3).value = "SI" if alertado else "NO"
+            _save(wb)
+        finally:
+            wb.close()
+
+
+# ---------------------------------------------------------------------------
+# HISTORIAL (registro de eventos por equipo: creación, revisiones, notas...)
+# ---------------------------------------------------------------------------
+
+def _log_historial(wb, sn, tipo, detalle, fecha=None):
+    ws = _get_or_create_sheet(wb, HISTORIAL_SHEET, HISTORIAL_HEADERS)
+    new_id = _next_id(ws)
+    row = ws.max_row + 1
+    ws.cell(row=row, column=1).value = new_id
+    ws.cell(row=row, column=2).value = sn
+    ws.cell(row=row, column=3).value = fecha or date.today()
+    ws.cell(row=row, column=4).value = tipo
+    ws.cell(row=row, column=5).value = detalle
+    return new_id
+
+
+def _log_mantenimiento_changes(wb, sn, before, after):
+    for key, label in MANTENIMIENTO_LABELS.items():
+        old_v = before.get(key)
+        new_v = after.get(key)
+        if new_v and new_v != old_v:
+            _log_historial(wb, sn, "mantenimiento", label + " registrada: " + new_v)
+
+
+def list_historial(sn):
+    with _lock:
+        wb = _load()
+        try:
+            if HISTORIAL_SHEET not in wb.sheetnames:
+                return []
+            ws = wb[HISTORIAL_SHEET]
+            items = []
+            for _, values in _sheet_rows(ws):
+                if _clean(values[1]) != sn:
+                    continue
+                items.append({
+                    "id": values[0], "sn": values[1],
+                    "fecha": _cell_to_date_str(values[2]),
+                    "tipo": _clean(values[3]), "detalle": _clean(values[4]),
+                })
+            items.sort(key=lambda x: x["fecha"] or "", reverse=True)
+            return items
+        finally:
+            wb.close()
+
+
+def add_historial_nota(sn, detalle):
+    if not (detalle or "").strip():
+        raise ValueError("La nota está vacía.")
+    with _lock:
+        wb = _load()
+        try:
+            if sn not in wb.sheetnames:
+                raise SheetNotFoundError(sn)
+            _log_historial(wb, sn, "nota", detalle.strip())
+            _save(wb)
+        finally:
+            wb.close()
+    return list_historial(sn)
+
+
+# ---------------------------------------------------------------------------
+# AVERIAS (incidencias por equipo, abiertas/cerradas)
+# ---------------------------------------------------------------------------
+
+def list_averias(sn):
+    with _lock:
+        wb = _load()
+        try:
+            if AVERIAS_SHEET not in wb.sheetnames:
+                return []
+            ws = wb[AVERIAS_SHEET]
+            items = []
+            for _, values in _sheet_rows(ws):
+                if _clean(values[1]) != sn:
+                    continue
+                items.append({
+                    "id": values[0], "sn": values[1],
+                    "fechaApertura": _cell_to_date_str(values[2]),
+                    "descripcion": _clean(values[3]),
+                    "componente": _clean(values[4]) if len(values) > 4 else None,
+                    "tecnico": _clean(values[5]) if len(values) > 5 else None,
+                    "estado": (_clean(values[6]) if len(values) > 6 else None) or "Abierta",
+                    "fechaResolucion": _cell_to_date_str(values[7]) if len(values) > 7 else None,
+                    "notasResolucion": _clean(values[8]) if len(values) > 8 else None,
+                })
+            items.sort(key=lambda x: x["fechaApertura"] or "", reverse=True)
+            return items
+        finally:
+            wb.close()
+
+
+def _count_averias_abiertas(wb):
+    if AVERIAS_SHEET not in wb.sheetnames:
+        return {}
+    ws = wb[AVERIAS_SHEET]
+    counts = {}
+    for _, values in _sheet_rows(ws):
+        sn = _clean(values[1]) if len(values) > 1 else None
+        estado = (_clean(values[6]) if len(values) > 6 else None) or "Abierta"
+        if sn and estado == "Abierta":
+            counts[sn] = counts.get(sn, 0) + 1
+    return counts
+
+
+def create_averia(sn, record):
+    descripcion = (record.get("descripcion") or "").strip()
+    if not descripcion:
+        raise ValueError("Falta la descripción de la avería.")
+    with _lock:
+        wb = _load()
+        try:
+            if sn not in wb.sheetnames:
+                raise SheetNotFoundError(sn)
+            ws = _get_or_create_sheet(wb, AVERIAS_SHEET, AVERIAS_HEADERS)
+            new_id = _next_id(ws)
+            row = ws.max_row + 1
+            ws.cell(row=row, column=1).value = new_id
+            ws.cell(row=row, column=2).value = sn
+            ws.cell(row=row, column=3).value = _date_str_to_value(record.get("fechaApertura")) or date.today()
+            ws.cell(row=row, column=4).value = descripcion
+            ws.cell(row=row, column=5).value = record.get("componente")
+            ws.cell(row=row, column=6).value = record.get("tecnico")
+            ws.cell(row=row, column=7).value = "Abierta"
+            _log_historial(wb, sn, "averia_abierta", "Avería registrada: " + descripcion)
+            _save(wb)
+        finally:
+            wb.close()
+    return list_averias(sn)
+
+
+def update_averia(sn, averia_id, record):
+    with _lock:
+        wb = _load()
+        try:
+            if AVERIAS_SHEET not in wb.sheetnames:
+                raise AveriaNotFoundError(str(averia_id))
+            ws = wb[AVERIAS_SHEET]
+            target_row = None
+            for row, values in _sheet_rows(ws):
+                if str(values[0]) == str(averia_id) and _clean(values[1]) == sn:
+                    target_row = row
+                    break
+            if target_row is None:
+                raise AveriaNotFoundError(str(averia_id))
+            if "descripcion" in record and record.get("descripcion"):
+                ws.cell(row=target_row, column=4).value = record.get("descripcion")
+            if "componente" in record:
+                ws.cell(row=target_row, column=5).value = record.get("componente")
+            if "tecnico" in record:
+                ws.cell(row=target_row, column=6).value = record.get("tecnico")
+            estado = record.get("estado")
+            if estado:
+                ws.cell(row=target_row, column=7).value = estado
+            if estado == "Cerrada":
+                ws.cell(row=target_row, column=8).value = _date_str_to_value(record.get("fechaResolucion")) or date.today()
+                ws.cell(row=target_row, column=9).value = record.get("notasResolucion")
+                detalle = "Avería resuelta"
+                if record.get("notasResolucion"):
+                    detalle += ": " + record.get("notasResolucion")
+                _log_historial(wb, sn, "averia_cerrada", detalle)
+            _save(wb)
+        finally:
+            wb.close()
+    return list_averias(sn)

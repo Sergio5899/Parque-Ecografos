@@ -113,3 +113,44 @@ def download_bytes_by_path(path):
 def upload_bytes_by_path(path, data):
     url = f"{GRAPH_ROOT}/me/drive/root:/{path}:/content"
     requests.put(url, data=data, headers={**_headers(), "Content-Type": "application/octet-stream"}, timeout=30)
+
+
+def _quote_path(path):
+    from urllib.parse import quote
+    return quote(path)
+
+
+def list_children_by_path(path):
+    """Lista los hijos de una carpeta de /me/drive. [] si la carpeta no existe."""
+    url = f"{GRAPH_ROOT}/me/drive/root:/{_quote_path(path)}:/children"
+    res = requests.get(url, headers=_headers(), timeout=30)
+    if res.status_code == 404:
+        return []
+    if res.status_code >= 400:
+        raise RuntimeError(f"Graph GET {url} -> {res.status_code}: {res.text[:300]}")
+    return [{"id": it["id"], "name": it["name"], "isFile": "file" in it} for it in res.json().get("value", [])]
+
+
+def delete_item_by_path(path):
+    """Borra un archivo/carpeta de /me/drive por ruta. No falla si ya no existe."""
+    url = f"{GRAPH_ROOT}/me/drive/root:/{_quote_path(path)}"
+    res = requests.delete(url, headers=_headers(), timeout=30)
+    if res.status_code not in (204, 404):
+        raise RuntimeError(f"Graph DELETE {url} -> {res.status_code}: {res.text[:300]}")
+
+
+def ensure_folder_path(path):
+    """Crea (si hace falta) cada carpeta intermedia de 'path', relativo a la raíz de /me/drive."""
+    current = ""
+    for part in [p for p in path.split("/") if p]:
+        parent = current
+        current = f"{current}/{part}" if current else part
+        url = f"{GRAPH_ROOT}/me/drive/root:/{_quote_path(current)}"
+        res = requests.get(url, headers=_headers(), timeout=30)
+        if res.status_code == 200:
+            continue
+        if res.status_code != 404:
+            raise RuntimeError(f"Graph GET {url} -> {res.status_code}: {res.text[:300]}")
+        create_url = (f"{GRAPH_ROOT}/me/drive/root:/{_quote_path(parent)}:/children"
+                      if parent else f"{GRAPH_ROOT}/me/drive/root/children")
+        _req("POST", create_url, json={"name": part, "folder": {}, "@microsoft.graph.conflictBehavior": "replace"})

@@ -1,0 +1,17 @@
+name: Chequeo diario de alertas de revisión
+
+on:
+  schedule:
+    # 07:00 UTC ~ 09:00 en Madrid en horario de invierno (08:00 en verano).
+    # Render "duerme" el servicio gratuito tras ~15 min sin uso; esta llamada
+    # también sirve para despertarlo antes de que alguien lo necesite.
+    - cron: "0 7 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar a /api/alertas/check
+        run: |
+          curl -sS -f "https://parque-ecografos.onrender.com/api/alertas/check?token=${{ secrets.ALERT_TOKEN }}"

@@ -3,9 +3,11 @@ import os
 import webbrowser
 import threading
 
-from flask import Flask, jsonify, request, render_template, session, redirect, url_for
+from flask import Flask, jsonify, request, render_template, session, redirect, url_for, Response
 
 import excel_store as store
+import photos_store
+import alertas
 
 try:
     import graph_auth
@@ -26,7 +28,7 @@ def _error(msg, code=400):
 def _require_login():
     if not APP_PASSWORD:
         return None
-    if request.endpoint in ("login", "static"):
+    if request.endpoint in ("login", "static", "api_check_alertas"):
         return None
     if session.get("authed"):
         return None
@@ -64,6 +66,12 @@ def _handle_store_errors(fn, *args, **kwargs):
         return None, _error("Ya existe un equipo con ese número de serie.", 409)
     except store.SheetNotFoundError:
         return None, _error("Ese equipo ya no existe.", 404)
+    except store.AveriaNotFoundError:
+        return None, _error("Esa avería no existe.", 404)
+    except photos_store.PhotoTooLargeError as e:
+        return None, _error(str(e), 413)
+    except ValueError as e:
+        return None, _error(str(e) or "Datos inválidos.", 400)
     except FileNotFoundError as e:
         return None, _error(str(e) or "No se encuentra el archivo Excel.", 500)
     except PermissionError:
@@ -102,6 +110,85 @@ def api_update(sn):
 def api_delete(sn):
     data, err = _handle_store_errors(store.delete_equipo, sn)
     return err if err else jsonify({"ok": True})
+
+
+@app.route("/api/equipos/<sn>/fotos", methods=["GET"])
+def api_list_fotos(sn):
+    data, err = _handle_store_errors(photos_store.list_photos, sn)
+    return err if err else jsonify(data)
+
+
+@app.route("/api/equipos/<sn>/fotos", methods=["POST"])
+def api_upload_foto(sn):
+    f = request.files.get("foto")
+    if not f or not f.filename:
+        return _error("No se ha recibido ninguna foto.")
+    data, err = _handle_store_errors(photos_store.save_photo, sn, f.filename, f.read())
+    return err if err else (jsonify({"name": data}), 201)
+
+
+@app.route("/api/equipos/<sn>/fotos/<path:filename>", methods=["GET"])
+def api_get_foto(sn, filename):
+    result, err = _handle_store_errors(photos_store.get_photo_bytes, sn, filename)
+    if err:
+        return err
+    data, content_type = result
+    if data is None:
+        return _error("Foto no encontrada.", 404)
+    return Response(data, mimetype=content_type)
+
+
+@app.route("/api/equipos/<sn>/fotos/<path:filename>", methods=["DELETE"])
+def api_delete_foto(sn, filename):
+    data, err = _handle_store_errors(photos_store.delete_photo, sn, filename)
+    return err if err else jsonify({"ok": True})
+
+
+@app.route("/api/equipos/<sn>/historial", methods=["GET"])
+def api_list_historial(sn):
+    data, err = _handle_store_errors(store.list_historial, sn)
+    return err if err else jsonify(data)
+
+
+@app.route("/api/equipos/<sn>/historial", methods=["POST"])
+def api_add_historial(sn):
+    body = request.get_json(force=True) or {}
+    data, err = _handle_store_errors(store.add_historial_nota, sn, body.get("detalle") or "")
+    return err if err else (jsonify(data), 201)
+
+
+@app.route("/api/equipos/<sn>/averias", methods=["GET"])
+def api_list_averias(sn):
+    data, err = _handle_store_errors(store.list_averias, sn)
+    return err if err else jsonify(data)
+
+
+@app.route("/api/equipos/<sn>/averias", methods=["POST"])
+def api_create_averia(sn):
+    record = request.get_json(force=True) or {}
+    data, err = _handle_store_errors(store.create_averia, sn, record)
+    return err if err else (jsonify(data), 201)
+
+
+@app.route("/api/equipos/<sn>/averias/<averia_id>", methods=["PUT"])
+def api_update_averia(sn, averia_id):
+    record = request.get_json(force=True) or {}
+    data, err = _handle_store_errors(store.update_averia, sn, averia_id, record)
+    return err if err else jsonify(data)
+
+
+@app.route("/api/alertas/check", methods=["GET", "POST"])
+def api_check_alertas():
+    token = request.args.get("token") or request.headers.get("X-Alert-Token")
+    expected = os.environ.get("ALERT_TOKEN")
+    if not expected or token != expected:
+        return _error("No autorizado.", 401)
+    dry_run = request.args.get("dry_run") in ("1", "true", "yes")
+    try:
+        resultado = alertas.check_and_notify(dry_run=dry_run)
+    except RuntimeError as e:
+        return _error(str(e), 502)
+    return jsonify(resultado)
 
 
 def _open_browser():

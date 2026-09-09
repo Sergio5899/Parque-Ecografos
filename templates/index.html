@@ -161,6 +161,23 @@
 
   .toast{ position:fixed; left:50%; bottom:26px; transform:translate(-50%, 8px); z-index:60; background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:11px; font-size:13px; opacity:0; transition:opacity .18s, transform .18s; pointer-events:none; max-width:88%; text-align:center; }
   .toast.show{ opacity:1; transform:translate(-50%, 0); }
+
+  .empty-inline{ grid-column:1/-1; font-size:12.5px; color:var(--ink-faint); font-style:italic; padding:4px 2px 8px; }
+
+  .photo-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .photo-thumb{ position:relative; aspect-ratio:1; border-radius:10px; overflow:hidden; border:1px solid var(--border); background:var(--surface-2); }
+  .photo-thumb img{ width:100%; height:100%; object-fit:cover; cursor:pointer; display:block; }
+  .photo-del{ position:absolute; top:4px; right:4px; width:22px; height:22px; border-radius:50%; border:none; background:rgba(10,18,16,.55); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .photo-del svg{ width:11px; height:11px; }
+  .photo-add{ aspect-ratio:1; border-radius:10px; border:1px dashed var(--border); display:flex; align-items:center; justify-content:center; color:var(--accent); cursor:pointer; }
+  .photo-add svg{ width:22px; height:22px; }
+
+  .lightbox{ position:fixed; inset:0; background:rgba(10,18,16,.85); z-index:70; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity .15s; }
+  .lightbox.open{ opacity:1; pointer-events:auto; }
+  .lightbox img{ max-width:92vw; max-height:88vh; border-radius:10px; }
+  .lightbox .icon-btn{ position:absolute; top:16px; right:16px; background:var(--surface); }
+
+  .badge.on-trow{ margin-left:8px; }
 </style>
 </head>
 <body>
@@ -209,6 +226,24 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="averiaModal">
+    <div class="modal">
+      <h3>Registrar avería</h3>
+      <div class="field"><label>Descripción *</label><textarea id="averiaDescripcion" placeholder="Qué ha fallado…"></textarea></div>
+      <div class="field"><label>Componente afectado</label><input id="averiaComponente" placeholder="p. ej. Sonda X5-1, ACB…"></div>
+      <div class="field"><label>Técnico</label><input id="averiaTecnico" placeholder="Quién la atiende"></div>
+      <div class="row">
+        <button class="btn ghost" id="averiaCancel">Cancelar</button>
+        <button class="btn primary" id="averiaSave">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="lightbox" id="lightbox">
+    <img id="lightboxImg" alt="Foto del equipo">
+    <button class="icon-btn" id="lightboxClose" aria-label="Cerrar"></button>
+  </div>
+
   <div class="toast" id="toast"></div>
 </div>
 
@@ -243,12 +278,18 @@
     if(isNaN(d.getTime())) return null;
     return Math.round((Date.now() - d.getTime()) / 86400000);
   }
-  function estadoRevision(iso){
+  function periodicidadDias(periodicidadMeses){
+    var meses = parseInt(periodicidadMeses, 10);
+    if(!meses || meses <= 0) meses = 12;
+    return meses * 30;
+  }
+  function estadoRevision(iso, periodicidadMeses){
     var d = daysSince(iso);
+    var periodo = periodicidadDias(periodicidadMeses);
     if(d === null) return {label:"Sin revisión", cls:"muted"};
     if(d < 0) return {label:"Programada", cls:"good"};
-    if(d <= 180) return {label:"Revisado", cls:"good"};
-    if(d <= 365) return {label:"Revisar pronto", cls:"warn"};
+    if(d <= periodo) return {label:"Revisado", cls:"good"};
+    if(d <= periodo + 30) return {label:"Revisar pronto", cls:"warn"};
     return {label:"Revisión atrasada", cls:"bad"};
   }
 
@@ -325,7 +366,7 @@
   function renderStats(){
     var total = state.equipos.length;
     var hospitals = uniqueHospitals().length;
-    var atrasados = state.equipos.filter(function(e){ return estadoRevision(e.ultimaRevisionPM).cls === "bad"; }).length;
+    var atrasados = state.equipos.filter(function(e){ return estadoRevision(e.ultimaRevisionPM, e.periodicidadMeses).cls === "bad"; }).length;
     statsEl.innerHTML =
       '<div class="stat-tile"><div class="v">'+total+'</div><div class="l">Equipos</div></div>'+
       '<div class="stat-tile"><div class="v">'+hospitals+'</div><div class="l">Hospitales / centros</div></div>'+
@@ -351,7 +392,7 @@
       return;
     }
     listEl.innerHTML = items.map(function(e){
-      var estado = estadoRevision(e.ultimaRevisionPM);
+      var estado = estadoRevision(e.ultimaRevisionPM, e.periodicidadMeses);
       var hospHtml = isReal(e.hospital)
         ? '<div class="card-hosp">'+ICONS.pin+'<span>'+esc(e.hospital)+'</span></div>'
         : '<div class="card-hosp unset">'+ICONS.pin+'<span>Sin hospital asignado</span></div>';
@@ -359,6 +400,12 @@
       if(isReal(e.swVersion)) metaBits.push("SW "+esc(e.swVersion));
       var pmDate = fmtDate(e.ultimaRevisionPM);
       if(pmDate) metaBits.push("PM "+pmDate);
+      var averiaHtml = (e.averiasAbiertas > 0)
+        ? '<div class="card-meta" style="color:var(--bad);font-family:inherit;align-items:center;">'+
+            '<span style="display:inline-flex;width:13px;height:13px;flex:none;">'+ICONS.warn+'</span> '+
+            e.averiasAbiertas+(e.averiasAbiertas===1?" avería abierta":" averías abiertas")+
+          '</div>'
+        : '';
       return '<div class="card" data-sn="'+esc(e.sn)+'">'+
         '<div class="card-top">'+
           '<div><div class="card-modelo">'+esc(e.modelo||"(sin modelo)")+'</div><div class="card-sn">S/N '+esc(e.sn)+'</div></div>'+
@@ -366,6 +413,7 @@
         '</div>'+
         hospHtml+
         (metaBits.length ? '<div class="card-meta">'+metaBits.map(esc).join('<span>·</span>')+'</div>' : '')+
+        averiaHtml+
       '</div>';
     }).join("");
   }
@@ -382,7 +430,7 @@
   function renderDetail(sn){
     var e = state.equipos.find(function(x){ return x.sn === sn; });
     if(!e){ closeSheet(detailSheet); return; }
-    var estado = estadoRevision(e.ultimaRevisionPM);
+    var estado = estadoRevision(e.ultimaRevisionPM, e.periodicidadMeses);
 
     var componentesHtml = (e.componentes||[]).map(function(c){
       return '<div class="trow"><div class="t-name">'+esc(c.nombre||"Componente")+'</div><div class="t-grid">'+
@@ -422,6 +470,7 @@
           '<div class="status-grid">'+
             '<div class="status-tile '+(estado.cls!=="muted"?estado.cls:"")+'"><div class="l">Última revisión PM</div><div class="v">'+(fmtDate(e.ultimaRevisionPM)||"—")+'</div></div>'+
             '<div class="status-tile"><div class="l">Hospital / centro</div><div class="v" style="font-family:inherit;">'+(isReal(e.hospital)?esc(e.hospital):"Sin asignar")+'</div></div>'+
+            '<div class="status-tile"><div class="l">Periodicidad revisión</div><div class="v">'+(isReal(e.periodicidadMeses)?e.periodicidadMeses+" meses":"12 meses (por defecto)")+'</div></div>'+
           '</div>'+
         '</div>'+
         '<div class="section"><div class="section-title">Datos generales</div><div class="kv-card">'+
@@ -441,12 +490,152 @@
           statusTile("Último backup", e.ultimoBackup)+ statusTile("Test general", e.ultimoTestGeneral)+
           statusTile("Test de sondas", e.ultimoTestSondas)+ statusTile("Test de baterías", e.ultimoTestBaterias)+
         '</div></div>'+
+        '<div class="section"><div class="section-title">Fotos</div>'+
+          '<div class="photo-grid" id="fotosBox"><div class="empty-inline">Cargando…</div></div>'+
+        '</div>'+
+        '<div class="section"><div class="section-title">Historial</div>'+
+          '<div id="historialBox"><div class="empty-inline">Cargando…</div></div>'+
+          '<button type="button" class="add-row-btn" id="addNotaBtn">'+ICONS.plus+' Añadir nota</button>'+
+        '</div>'+
+        '<div class="section"><div class="section-title">Averías</div>'+
+          '<div id="averiasBox"><div class="empty-inline">Cargando…</div></div>'+
+          '<button type="button" class="add-row-btn" id="addAveriaBtn">'+ICONS.plus+' Registrar avería</button>'+
+        '</div>'+
       '</div>';
 
     $("#detBack", detailSheet).onclick = function(){ closeSheet(detailSheet); };
     $("#detEdit", detailSheet).onclick = function(){ openForm(e); };
     $("#detDelete", detailSheet).onclick = function(){ confirmDelete(e); };
+    wireFotos(sn);
+    wireHistorial(sn);
+    wireAverias(sn);
     openSheet(detailSheet);
+  }
+
+  // ---------- fotos ----------
+  function fotoUrl(sn, name){ return "/api/equipos/"+encodeURIComponent(sn)+"/fotos/"+encodeURIComponent(name)+"?v="+Date.now(); }
+
+  function apiUpload(path, formData){
+    return fetch(path, { method:"POST", body: formData }).then(function(res){
+      return res.json().then(function(data){
+        if(!res.ok) throw new Error(data.error || ("Error " + res.status));
+        return data;
+      });
+    });
+  }
+
+  function renderFotos(sn, names){
+    var box = $("#fotosBox", detailSheet);
+    if(!box) return;
+    var tiles = names.map(function(name){
+      return '<div class="photo-thumb"><img src="'+fotoUrl(sn,name)+'" loading="lazy" data-name="'+esc(name)+'">'+
+        '<button type="button" class="photo-del" data-name="'+esc(name)+'" aria-label="Borrar foto">'+ICONS.x+'</button>'+
+      '</div>';
+    }).join("");
+    box.innerHTML = tiles +
+      '<label class="photo-add">'+ICONS.plus+'<input type="file" accept="image/*" capture="environment" id="fotoInput" hidden></label>';
+    if(names.length === 0){
+      box.insertAdjacentHTML("afterbegin", '<div class="empty-inline">Sin fotos todavía.</div>');
+    }
+    var input = $("#fotoInput", box);
+    if(input) input.onchange = function(ev){
+      var file = ev.target.files && ev.target.files[0];
+      if(!file) return;
+      var fd = new FormData(); fd.append("foto", file);
+      toast("Subiendo foto…");
+      apiUpload("/api/equipos/"+encodeURIComponent(sn)+"/fotos", fd).then(function(){
+        return api("GET", "/api/equipos/"+encodeURIComponent(sn)+"/fotos");
+      }).then(function(list){ renderFotos(sn, list); toast("Foto añadida."); })
+        .catch(function(err){ toast("No se ha podido subir: " + err.message); });
+    };
+    box.querySelectorAll(".photo-del").forEach(function(btn){
+      btn.onclick = function(){
+        var name = btn.getAttribute("data-name");
+        api("DELETE", "/api/equipos/"+encodeURIComponent(sn)+"/fotos/"+encodeURIComponent(name)).then(function(){
+          return api("GET", "/api/equipos/"+encodeURIComponent(sn)+"/fotos");
+        }).then(function(list){ renderFotos(sn, list); toast("Foto eliminada."); })
+          .catch(function(err){ toast("No se ha podido borrar: " + err.message); });
+      };
+    });
+    box.querySelectorAll(".photo-thumb img").forEach(function(img){
+      img.onclick = function(){ openLightbox(img.src); };
+    });
+  }
+
+  function wireFotos(sn){
+    api("GET", "/api/equipos/"+encodeURIComponent(sn)+"/fotos").then(function(list){ renderFotos(sn, list); })
+      .catch(function(){ var box=$("#fotosBox", detailSheet); if(box) box.innerHTML = '<div class="empty-inline">No se pudieron cargar las fotos.</div>'; });
+  }
+
+  function openLightbox(src){ $("#lightboxImg").src = src; $("#lightbox").classList.add("open"); }
+  function closeLightbox(){ $("#lightbox").classList.remove("open"); $("#lightboxImg").src = ""; }
+
+  // ---------- historial ----------
+  function renderHistorial(sn, items){
+    var box = $("#historialBox", detailSheet);
+    if(!box) return;
+    if(!items.length){ box.innerHTML = '<div class="empty-inline">Sin eventos registrados.</div>'; return; }
+    box.innerHTML = '<div class="table-card">'+items.map(function(h){
+      return '<div class="trow"><div class="t-name">'+esc(h.detalle||h.tipo)+'</div>'+
+        '<div style="font-size:11.5px;color:var(--ink-faint);font-family:\'IBM Plex Mono\';margin-top:2px;">'+
+          esc(fmtDate(h.fecha)||h.fecha||"")+' · '+esc(h.tipo)+
+        '</div></div>';
+    }).join("")+'</div>';
+  }
+
+  function wireHistorial(sn){
+    api("GET", "/api/equipos/"+encodeURIComponent(sn)+"/historial").then(function(items){ renderHistorial(sn, items); })
+      .catch(function(){ var box=$("#historialBox", detailSheet); if(box) box.innerHTML = '<div class="empty-inline">No se pudo cargar el historial.</div>'; });
+    var btn = $("#addNotaBtn", detailSheet);
+    if(btn) btn.onclick = function(){
+      var detalle = window.prompt("Nota para el historial de este equipo:");
+      if(!detalle || !detalle.trim()) return;
+      api("POST", "/api/equipos/"+encodeURIComponent(sn)+"/historial", {detalle: detalle.trim()}).then(function(items){
+        renderHistorial(sn, items); toast("Nota añadida.");
+      }).catch(function(err){ toast("No se ha podido guardar: " + err.message); });
+    };
+  }
+
+  // ---------- averías ----------
+  function renderAverias(sn, items){
+    var box = $("#averiasBox", detailSheet);
+    if(!box) return;
+    if(!items.length){ box.innerHTML = '<div class="empty-inline">Sin averías registradas.</div>'; return; }
+    box.innerHTML = '<div class="table-card">'+items.map(function(a){
+      var abierta = a.estado !== "Cerrada";
+      return '<div class="trow"><div class="t-name">'+esc(a.descripcion)+
+          '<span class="badge on-trow '+(abierta?"bad":"muted")+'">'+(abierta?"Abierta":"Cerrada")+'</span></div>'+
+        '<div class="t-grid">'+
+          '<div>Apertura<span>'+esc(fmtDate(a.fechaApertura)||"—")+'</span></div>'+
+          '<div>Componente<span>'+esc(a.componente||"—")+'</span></div>'+
+          (a.tecnico ? '<div>Técnico<span>'+esc(a.tecnico)+'</span></div>' : '')+
+          (a.fechaResolucion ? '<div>Resuelta<span>'+esc(fmtDate(a.fechaResolucion)||"—")+'</span></div>' : '')+
+        '</div>'+
+        (abierta ? '<button type="button" class="add-row-btn" style="margin-top:8px;" data-resolve="'+esc(a.id)+'">Marcar resuelta</button>' : '')+
+      '</div>';
+    }).join("")+'</div>';
+    box.querySelectorAll("[data-resolve]").forEach(function(btn){
+      btn.onclick = function(){
+        var notas = window.prompt("Notas de la resolución (opcional):") || "";
+        api("PUT", "/api/equipos/"+encodeURIComponent(sn)+"/averias/"+encodeURIComponent(btn.getAttribute("data-resolve")), {estado:"Cerrada", notasResolucion: notas}).then(function(items){
+          renderAverias(sn, items); toast("Avería marcada como resuelta.");
+          loadEquipos(true);
+        }).catch(function(err){ toast("No se ha podido actualizar: " + err.message); });
+      };
+    });
+  }
+
+  function wireAverias(sn){
+    api("GET", "/api/equipos/"+encodeURIComponent(sn)+"/averias").then(function(items){ renderAverias(sn, items); })
+      .catch(function(){ var box=$("#averiasBox", detailSheet); if(box) box.innerHTML = '<div class="empty-inline">No se pudieron cargar las averías.</div>'; });
+    var btn = $("#addAveriaBtn", detailSheet);
+    if(btn) btn.onclick = function(){ openAveriaModal(sn); };
+  }
+
+  function openAveriaModal(sn){
+    $("#averiaDescripcion").value = ""; $("#averiaComponente").value = ""; $("#averiaTecnico").value = "";
+    state.averiaSn = sn;
+    $("#averiaModal").classList.add("open");
   }
 
   function statusTile(label, iso){
@@ -464,7 +653,7 @@
   var repCounter = 0;
 
   function blankEquipo(){
-    return { sn:"", modelo:"", hospital:"", swVersion:"", hwVersion:"", notas:"",
+    return { sn:"", modelo:"", hospital:"", swVersion:"", hwVersion:"", notas:"", periodicidadMeses:"",
       fechaInstalacion:"", ultimaRevisionPM:"", ultimoBackup:"", ultimoTestGeneral:"", ultimoTestSondas:"", ultimoTestBaterias:"", borrarAvisosMtto:"",
       dicom:{ip:"",mask:"",gateway:"",aet:"",port:"",dvdPc:""}, notasDicom:"",
       componentes: COMPONENTE_LABELS.map(function(n){ return {nombre:n,version:"",maxSw:"",codigo12nc:""}; }),
@@ -567,6 +756,7 @@
         '</div>'+
         repListHtml("nodosDicom", data.nodosDicom, "Nodos DICOM")+
         '<div class="section"><div class="section-title">Mantenimiento</div>'+
+          '<div class="field"><label>Periodicidad de revisión (meses)</label><input type="number" min="1" data-f="periodicidadMeses" value="'+esc(data.periodicidadMeses)+'" placeholder="12"></div>'+
           dateField("ultimaRevisionPM","Última revisión PM", data.ultimaRevisionPM)+
           dateField("ultimoBackup","Último backup", data.ultimoBackup)+
           dateField("ultimoTestGeneral","Último test general", data.ultimoTestGeneral)+
@@ -667,7 +857,7 @@
     var record = {
       sn: sn, modelo: modelo,
       hospital: get("hospital") || null, swVersion: get("swVersion") || null, hwVersion: get("hwVersion") || null,
-      notas: get("notas") || null, fechaInstalacion: get("fechaInstalacion") || null,
+      notas: get("notas") || null, periodicidadMeses: get("periodicidadMeses") || null, fechaInstalacion: get("fechaInstalacion") || null,
       ultimaRevisionPM: get("ultimaRevisionPM") || null, ultimoBackup: get("ultimoBackup") || null,
       ultimoTestGeneral: get("ultimoTestGeneral") || null, ultimoTestSondas: get("ultimoTestSondas") || null,
       ultimoTestBaterias: get("ultimoTestBaterias") || null, borrarAvisosMtto: get("borrarAvisosMtto") || null,
@@ -695,6 +885,27 @@
     $("#confirmBody").textContent = (e.modelo||"Equipo") + " · S/N " + e.sn + (isReal(e.hospital) ? (" · " + e.hospital) : "") + ". Esta acción no se puede deshacer.";
     $("#confirmModal").classList.add("open");
   }
+  $("#lightboxClose").innerHTML = ICONS.x;
+  $("#lightboxClose").onclick = closeLightbox;
+  $("#lightbox").addEventListener("click", function(ev){ if(ev.target.id === "lightbox") closeLightbox(); });
+
+  $("#averiaCancel").onclick = function(){ $("#averiaModal").classList.remove("open"); };
+  $("#averiaSave").onclick = function(){
+    var descripcion = $("#averiaDescripcion").value.trim();
+    if(!descripcion){ toast("Describe la avería."); return; }
+    var sn = state.averiaSn;
+    api("POST", "/api/equipos/"+encodeURIComponent(sn)+"/averias", {
+      descripcion: descripcion,
+      componente: $("#averiaComponente").value.trim(),
+      tecnico: $("#averiaTecnico").value.trim()
+    }).then(function(items){
+      renderAverias(sn, items);
+      $("#averiaModal").classList.remove("open");
+      toast("Avería registrada.");
+      loadEquipos(true);
+    }).catch(function(err){ toast("No se ha podido guardar: " + err.message); });
+  };
+
   $("#confirmCancel").onclick = function(){ $("#confirmModal").classList.remove("open"); pendingDelete = null; };
   $("#confirmOk").onclick = function(){
     if(!pendingDelete) return;

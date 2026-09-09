@@ -55,3 +55,50 @@ Documentos`, que requeriría un permiso de administrador que no estaba
 disponible). El original en la carpeta de equipo se quedó tal cual, como
 copia congelada — si luego se resuelve el permiso de admin, se puede migrar
 la app a leer/escribir ahí en vez de tu OneDrive personal.
+
+## Fotos, historial y averías
+Estas funciones usan hojas nuevas del propio Excel (`META`, `HISTORIAL`,
+`AVERIAS`) que la app crea sola la primera vez que hacen falta — no hay que
+tocar el Excel a mano. Las fotos se guardan como archivos sueltos en tu
+OneDrive, en `PARQUE ECOS/fotos/<número de serie>/`, reutilizando las mismas
+credenciales de Microsoft Graph que ya tienes configuradas. No hace falta
+ninguna variable de entorno nueva para esto.
+
+## 5. Alertas automáticas por email (revisión atrasada)
+La app comprueba, cuando se le pide, qué equipos tienen la revisión (PM)
+atrasada según su propio campo "Periodicidad de revisión" (editable por
+equipo; si se deja en blanco se asume 12 meses), y manda un email SOLO la
+primera vez que un equipo pasa a estar atrasado (no todos los días).
+
+### 5.1 Variables de entorno nuevas en Render
+Añade estas variables en Render (Settings → Environment), junto a las que ya
+tenías:
+
+| Variable | Valor |
+|---|---|
+| ALERT_TOKEN | una contraseña larga inventada por ti (protege el endpoint de alertas) |
+| SMTP_HOST | `smtp.gmail.com` si usas Gmail |
+| SMTP_PORT | `587` |
+| SMTP_USER | tu cuenta de correo (ej. `tucuenta@gmail.com`) |
+| SMTP_PASS | una "contraseña de aplicación" de esa cuenta (no tu contraseña normal) |
+| ALERT_EMAIL_TO | a qué email quieres que lleguen los avisos (puede ser el mismo SMTP_USER) |
+
+Si usas Gmail: activa la verificación en 2 pasos en tu cuenta de Google y
+genera una "contraseña de aplicación" en myaccount.google.com/apppasswords —
+esa es la que va en `SMTP_PASS`, nunca tu contraseña normal de Gmail.
+
+### 5.2 Programar el chequeo diario (GitHub Actions)
+Este repositorio ya incluye `.github/workflows/check-alertas.yml`, que llama
+todos los días a `/api/alertas/check`. Solo falta darle el token:
+
+1. En GitHub, entra en el repositorio → **Settings** → **Secrets and
+   variables** → **Actions**.
+2. "New repository secret" → nombre `ALERT_TOKEN`, valor: el mismo que
+   pusiste en Render.
+3. Listo. Puedes probarlo a mano en la pestaña **Actions** → el workflow
+   "Chequeo diario de alertas de revisión" → **Run workflow**.
+
+Para probar sin que se envíe ningún email de verdad ni se marque nada como
+"ya avisado", puedes visitar en el navegador (con sesión iniciada no hace
+falta, este endpoint usa su propio token):
+`https://parque-ecografos.onrender.com/api/alertas/check?token=TU_TOKEN&dry_run=1`
