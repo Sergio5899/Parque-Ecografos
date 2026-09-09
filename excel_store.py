@@ -322,6 +322,20 @@ class AveriaNotFoundError(Exception):
     pass
 
 
+class HistorialNotFoundError(Exception):
+    pass
+
+
+def _delete_row_by_id(ws, sn, row_id):
+    """Busca en `ws` la fila cuyo ID (col 1) y SN (col 2) coincidan y la borra.
+    Devuelve True si la borró, False si no la encontró."""
+    for row, values in _sheet_rows(ws):
+        if str(values[0]) == str(row_id) and _clean(values[1]) == sn:
+            ws.delete_rows(row)
+            return True
+    return False
+
+
 def create_equipo(record):
     sn = sanitize_sheet_name(record.get("sn"))
     if not sn:
@@ -542,6 +556,18 @@ def add_historial_nota(sn, detalle):
     return list_historial(sn)
 
 
+def delete_historial_nota(sn, hist_id):
+    with _lock:
+        wb = _load()
+        try:
+            if HISTORIAL_SHEET not in wb.sheetnames or not _delete_row_by_id(wb[HISTORIAL_SHEET], sn, hist_id):
+                raise HistorialNotFoundError(str(hist_id))
+            _save(wb)
+        finally:
+            wb.close()
+    return list_historial(sn)
+
+
 # ---------------------------------------------------------------------------
 # AVERIAS (incidencias por equipo, abiertas/cerradas)
 # ---------------------------------------------------------------------------
@@ -642,6 +668,18 @@ def update_averia(sn, averia_id, record):
                 if record.get("notasResolucion"):
                     detalle += ": " + record.get("notasResolucion")
                 _log_historial(wb, sn, "averia_cerrada", detalle)
+            _save(wb)
+        finally:
+            wb.close()
+    return list_averias(sn)
+
+
+def delete_averia(sn, averia_id):
+    with _lock:
+        wb = _load()
+        try:
+            if AVERIAS_SHEET not in wb.sheetnames or not _delete_row_by_id(wb[AVERIAS_SHEET], sn, averia_id):
+                raise AveriaNotFoundError(str(averia_id))
             _save(wb)
         finally:
             wb.close()

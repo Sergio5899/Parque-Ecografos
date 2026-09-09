@@ -68,6 +68,8 @@ def _handle_store_errors(fn, *args, **kwargs):
         return None, _error("Ese equipo ya no existe.", 404)
     except store.AveriaNotFoundError:
         return None, _error("Esa avería no existe.", 404)
+    except store.HistorialNotFoundError:
+        return None, _error("Esa entrada de historial no existe.", 404)
     except photos_store.PhotoTooLargeError as e:
         return None, _error(str(e), 413)
     except ValueError as e:
@@ -157,6 +159,12 @@ def api_add_historial(sn):
     return err if err else (jsonify(data), 201)
 
 
+@app.route("/api/equipos/<sn>/historial/<hist_id>", methods=["DELETE"])
+def api_delete_historial(sn, hist_id):
+    data, err = _handle_store_errors(store.delete_historial_nota, sn, hist_id)
+    return err if err else jsonify(data)
+
+
 @app.route("/api/equipos/<sn>/averias", methods=["GET"])
 def api_list_averias(sn):
     data, err = _handle_store_errors(store.list_averias, sn)
@@ -174,6 +182,12 @@ def api_create_averia(sn):
 def api_update_averia(sn, averia_id):
     record = request.get_json(force=True) or {}
     data, err = _handle_store_errors(store.update_averia, sn, averia_id, record)
+    return err if err else jsonify(data)
+
+
+@app.route("/api/equipos/<sn>/averias/<averia_id>", methods=["DELETE"])
+def api_delete_averia(sn, averia_id):
+    data, err = _handle_store_errors(store.delete_averia, sn, averia_id)
     return err if err else jsonify(data)
 
 

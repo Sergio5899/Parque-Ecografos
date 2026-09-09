@@ -576,11 +576,21 @@
     if(!box) return;
     if(!items.length){ box.innerHTML = '<div class="empty-inline">Sin eventos registrados.</div>'; return; }
     box.innerHTML = '<div class="table-card">'+items.map(function(h){
-      return '<div class="trow"><div class="t-name">'+esc(h.detalle||h.tipo)+'</div>'+
+      return '<div class="trow" style="position:relative;">'+
+        '<button type="button" class="rm" data-del-hist="'+esc(h.id)+'" aria-label="Borrar nota">'+ICONS.x+'</button>'+
+        '<div class="t-name" style="padding-right:30px;">'+esc(h.detalle||h.tipo)+'</div>'+
         '<div style="font-size:11.5px;color:var(--ink-faint);font-family:\'IBM Plex Mono\';margin-top:2px;">'+
           esc(fmtDate(h.fecha)||h.fecha||"")+' · '+esc(h.tipo)+
         '</div></div>';
     }).join("")+'</div>';
+    box.querySelectorAll("[data-del-hist]").forEach(function(btn){
+      btn.onclick = function(){
+        if(!window.confirm("¿Borrar esta entrada del historial? No se puede deshacer.")) return;
+        api("DELETE", "/api/equipos/"+encodeURIComponent(sn)+"/historial/"+encodeURIComponent(btn.getAttribute("data-del-hist"))).then(function(items){
+          renderHistorial(sn, items); toast("Entrada borrada.");
+        }).catch(function(err){ toast("No se ha podido borrar: " + err.message); });
+      };
+    });
   }
 
   function wireHistorial(sn){
@@ -603,7 +613,9 @@
     if(!items.length){ box.innerHTML = '<div class="empty-inline">Sin averías registradas.</div>'; return; }
     box.innerHTML = '<div class="table-card">'+items.map(function(a){
       var abierta = a.estado !== "Cerrada";
-      return '<div class="trow"><div class="t-name">'+esc(a.descripcion)+
+      return '<div class="trow" style="position:relative;">'+
+        '<button type="button" class="rm" data-del-averia="'+esc(a.id)+'" aria-label="Borrar avería">'+ICONS.x+'</button>'+
+        '<div class="t-name" style="padding-right:30px;">'+esc(a.descripcion)+
           '<span class="badge on-trow '+(abierta?"bad":"muted")+'">'+(abierta?"Abierta":"Cerrada")+'</span></div>'+
         '<div class="t-grid">'+
           '<div>Apertura<span>'+esc(fmtDate(a.fechaApertura)||"—")+'</span></div>'+
@@ -621,6 +633,15 @@
           renderAverias(sn, items); toast("Avería marcada como resuelta.");
           loadEquipos(true);
         }).catch(function(err){ toast("No se ha podido actualizar: " + err.message); });
+      };
+    });
+    box.querySelectorAll("[data-del-averia]").forEach(function(btn){
+      btn.onclick = function(){
+        if(!window.confirm("¿Borrar esta avería? No se puede deshacer.")) return;
+        api("DELETE", "/api/equipos/"+encodeURIComponent(sn)+"/averias/"+encodeURIComponent(btn.getAttribute("data-del-averia"))).then(function(items){
+          renderAverias(sn, items); toast("Avería borrada.");
+          loadEquipos(true);
+        }).catch(function(err){ toast("No se ha podido borrar: " + err.message); });
       };
     });
   }
